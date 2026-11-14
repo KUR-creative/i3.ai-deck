@@ -28,7 +28,8 @@ def pairs_from_config(path):
     for slot in range(1, 11):
         left, right = variables[f'$left{slot}'], variables[f'$right{slot}']
         pairs.append(dict(slot=slot, label=f'F{slot}/{slot % 10}',
-                          left=int(left.split(':')[0]), right=int(right.split(':')[0])))
+                          left=int(left.split(':')[0]), right=int(right.split(':')[0]),
+                          left_name=left, right_name=right))
     return pairs
 
 
@@ -58,7 +59,8 @@ def pair_for(number, pairs):
 def focus_command(pair=None, con_id=None):
     commands = []
     if pair:
-        commands.extend(f'workspace --no-auto-back-and-forth number {int(pair[key])}'
+        commands.extend('workspace --no-auto-back-and-forth number '
+                        + json.dumps(pair[key + '_name'])
                         for key in ('left', 'right'))
     if con_id is not None:
         commands.append(f'[con_id={int(con_id)}] focus')
@@ -71,3 +73,8 @@ def focus(pair=None, con_id=None):
     result = ipc('command', focus_command(pair, con_id))
     if not result or not all(reply.get('success') for reply in result):
         raise RuntimeError('i3 이동 실패: ' + json.dumps(result, ensure_ascii=False))
+    if pair:
+        visible = {ws['num'] for ws in ipc('get_workspaces') if ws['visible']}
+        expected = {pair['left'], pair['right']}
+        if not expected.issubset(visible):
+            raise RuntimeError(f'쌍 전환 확인 실패: 예상 {sorted(expected)}, 현재 {sorted(visible)}')

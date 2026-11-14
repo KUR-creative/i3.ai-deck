@@ -40,8 +40,8 @@ class ModelTests(unittest.TestCase):
         row = next(r for r in model.snapshot()['rows'] if r.get('target') == 's')
         self.assertEqual(row['pair'], 'F8/8')
         self.assertEqual(focus_command(pair_for(18, model.pairs), 123),
-                         'workspace --no-auto-back-and-forth number 18; '
-                         'workspace --no-auto-back-and-forth number 8; [con_id=123] focus')
+                         'workspace --no-auto-back-and-forth number "18:label"; '
+                         'workspace --no-auto-back-and-forth number "8:label"; [con_id=123] focus')
         with patch.object(model, 'refresh'), patch('deck.i3.focus') as focus:
             model.navigate('s')
             focus.assert_called_once_with(model.pairs[7], 123)
