@@ -7,7 +7,7 @@ from .model import next_attention
 
 
 LABELS = dict(working='● 작업 중', waiting='? 질문', done='✓ 완료', idle='· 유휴',
-              exited='× 종료', unknown='? 확인 불가', empty='· 빈 쌍')
+              exited='× 종료', unknown='? 확인 불가', empty='· 빈 쌍', unmapped='? 연결 불명')
 
 
 def fit(text, width):

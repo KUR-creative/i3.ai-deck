@@ -127,3 +127,8 @@ def match_title(name, window_title):
     if first == name:
         return True
     return bool(re.fullmatch(r'[^\w\s]+\s+' + re.escape(name), first))
+
+
+def working_title(title):
+    """Codex's live working title starts with an animated braille spinner."""
+    return bool(re.match(r'^[\u2800-\u28ff]\s', title))

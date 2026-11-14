@@ -85,6 +85,31 @@ class ModelTests(unittest.TestCase):
         live['other'] = live['s']
         model.reconcile(live, [self.window()])
         self.assertFalse(model.sessions['s']['located'])
+        row = next(r for r in model.snapshot()['rows'] if r['id'] == 'pair:3')
+        self.assertEqual(row['state'], 'unmapped')
+
+    def test_working_title_distinguishes_a_dormant_duplicate(self):
+        model = self.model
+        model.titles.names['s'] = 'agent'
+        self.log.write_text('{"type":"event_msg","payload":{"type":"task_started"}}\n')
+        dormant = dict(self.window(2), con_id=456, title='agent | project')
+        model.reconcile(self.process(), [self.window(), dormant])
+        self.assertEqual(model.sessions['s']['con_id'], 123)
+        self.assertEqual(model.sessions['s']['slot'], 3)
+        # Finishing removes the spinner; the observed window identity survives.
+        model.reconcile(self.process(), [dict(self.window(), title='agent | project'), dormant])
+        self.assertEqual(model.sessions['s']['con_id'], 123)
+
+    def test_ambiguous_static_titles_are_not_called_empty(self):
+        model = self.model
+        model.titles.names['s'] = 'agent'
+        a = dict(self.window(3), title='agent | project')
+        b = dict(a, con_id=456, number=2)
+        model.reconcile(self.process(), [a, b])
+        self.assertFalse(model.sessions['s']['located'])
+        for row in model.snapshot()['rows']:
+            if row['slot'] in (2, 3):
+                self.assertEqual(row['state'], 'unmapped')
 
     def test_next_attention_skips_empty_working_exited_and_wraps(self):
         rows = [dict(id='empty', state='empty'),

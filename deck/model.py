@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 from . import i3
-from .observe import Rollout, Titles, discover, match_title
+from .observe import Rollout, Titles, discover, match_title, working_title
 
 
 class Model:
@@ -45,12 +45,21 @@ class Model:
             session['completion'] = state.completion
             # No project/cwd heuristics. Reject duplicate names and window matches.
             unique_name = sum(names.get(other) == names.get(sid) for other in live) == 1
-            candidates = [window for window in window_list
-                          if names.get(sid) and unique_name
-                          and match_title(names[sid], window['title'])]
+            matching = [window for window in window_list
+                        if names.get(sid) and match_title(names[sid], window['title'])]
+            candidates = matching if unique_name else []
             if len(candidates) == 1:
                 session['con_id'] = candidates[0]['con_id']
+            elif (session['con_id'] not in {w['con_id'] for w in candidates}
+                  and state.state == 'working'):
+                # A dormant terminal can retain the same session title. Only use
+                # the unique live working title, never the currently focused window.
+                working = [w for w in candidates if working_title(w['title'])]
+                if len(working) == 1:
+                    session['con_id'] = working[0]['con_id']
             window = by_id.get(session['con_id'])
+            session['candidate_slots'] = sorted({pair['slot'] for w in matching
+                                                if (pair := i3.pair_for(w['number'], self.pairs))})
             session.update(workspace=window['workspace'] if window else '',
                            number=window['number'] if window else -1)
             pair = i3.pair_for(session['number'], self.pairs)
@@ -84,9 +93,13 @@ class Model:
                                  attention_count=sum(needs_attention(s) for s in members),
                                  unread=any(s['unread'] for s in members)))
             else:
+                possible = [s for s in active if not s['located']
+                            and pair['slot'] in s.get('candidate_slots', [])]
                 rows.append(dict(id=f'pair:{pair["slot"]}', kind='empty',
-                                 slot=pair['slot'], pair=pair['label'], name='에이전트 없음',
-                                 state='empty', unread=False, located=True, target=None))
+                                 slot=pair['slot'], pair=pair['label'],
+                                 name=possible[0]['name'] if possible else '에이전트 없음',
+                                 state='unmapped' if possible else 'empty',
+                                 unread=False, located=True, target=None))
         unplaced = [dict(s, pair='?', kind='agent', target=s['id'])
                     for s in active if s['slot'] is None]
         rows.extend(unplaced)
