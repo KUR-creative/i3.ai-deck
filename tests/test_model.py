@@ -15,7 +15,8 @@ class ModelTests(unittest.TestCase):
         config = root / 'workspaces.conf'
         config.write_text('\n'.join(f'set ${side}{n} {n + offset}:label'
                                    for n in range(1, 11)
-                                   for side, offset in [('left', 10), ('right', 0)]))
+                                   for side, offset in [('left', 10), ('right', 0)])
+                          + '\nbindcode $mod+Shift+87 ' + chr(92) + '\n')
         self.model = Model(root, config)
         self.log = root / 'rollout.jsonl'
         self.log.write_text('{"type":"event_msg","payload":'

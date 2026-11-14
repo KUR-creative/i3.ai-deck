@@ -19,6 +19,8 @@ def ipc(kind, command=None):
 def pairs_from_config(path):
     variables = {}
     for line in path.read_text().splitlines():
+        if not re.match(r'^\s*set\s+\$(left|right)\d+\s', line):
+            continue
         parts = shlex.split(line, comments=True)
         if len(parts) == 3 and parts[0] == 'set':
             variables[parts[1]] = parts[2]
