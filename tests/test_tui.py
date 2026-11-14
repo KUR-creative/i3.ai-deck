@@ -56,6 +56,27 @@ class MouseTests(unittest.TestCase):
     def test_terminal_click_event_also_works(self):
         self.assertEqual(self.exercise([curses.BUTTON1_CLICKED]), ['pair:2'])
 
+    def test_only_current_pair_label_gets_cyan_background(self):
+        class ColoredClient(Client):
+            def request(self, action='snapshot', **params):
+                result = super().request(action, **params)
+                result['rows'][1].update(state='done', kind='pair', name='완료 작업')
+                return result
+
+        screen = Screen([ord('q')])
+        with ExitStack() as stack:
+            for name in ('curs_set', 'set_escdelay', 'mouseinterval', 'mousemask',
+                         'start_color', 'use_default_colors', 'init_pair'):
+                stack.enter_context(patch('deck.tui.curses.' + name))
+            stack.enter_context(patch('deck.tui.curses.has_colors', return_value=True))
+            stack.enter_context(patch('deck.tui.curses.color_pair', side_effect=lambda n: n << 8))
+            run(screen, ColoredClient())
+        self.assertIn((3, 0, 'F3/3  ', (5 << 8) | curses.A_BOLD), screen.drawn)
+        self.assertTrue(any(y == 2 and x == 7 and '완료' in text and attr == 3 << 8
+                            for y, x, text, attr in screen.drawn))
+        self.assertFalse(any(y == 2 and attr & (5 << 8) == 5 << 8
+                             for y, x, text, attr in screen.drawn))
+
 
 if __name__ == '__main__':
     unittest.main()

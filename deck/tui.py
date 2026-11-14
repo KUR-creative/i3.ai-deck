@@ -36,7 +36,7 @@ def run(screen, client):
         curses.start_color()
         curses.use_default_colors()
         for number, color in enumerate((curses.COLOR_GREEN, curses.COLOR_YELLOW,
-                                        curses.COLOR_CYAN, curses.COLOR_WHITE), 1):
+                                        curses.COLOR_GREEN, curses.COLOR_WHITE), 1):
             curses.init_pair(number, color, -1)
         curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_CYAN)
     selected, top, message = None, 0, ''
@@ -72,10 +72,10 @@ def run(screen, client):
             top = index - visible + 1
         screen.erase()
 
-        def put(y, text, attr=0):
-            if 0 <= y < height and width > 1:
+        def put(y, text, attr=0, x=0):
+            if 0 <= y < height and width - x > 1:
                 try:
-                    screen.addstr(y, 0, fit(text, width - 1), attr)
+                    screen.addstr(y, x, fit(text, width - x - 1), attr)
                 except curses.error:
                     pass
 
@@ -84,7 +84,8 @@ def run(screen, client):
         for line, row in enumerate(rows[top:top + visible], 1):
             empty = row['state'] in ('empty', 'exited')
             color = {'working': 1, 'waiting': 2, 'done': 3}.get(row['state'], 4)
-            attr = curses.color_pair(color) if curses.has_colors() else 0
+            status_attr = curses.color_pair(color) if curses.has_colors() else 0
+            attr = 0
             if empty:
                 attr = curses.A_DIM
             if row['id'] == selected:
@@ -97,6 +98,9 @@ def run(screen, client):
                 extra += f' [확인 {row["attention_count"]}]'
             put(line, f'{row["pair"]:6} {badge}{LABELS[row["state"]]}  '
                       f'{row["name"]}{extra}{location}', attr)
+            if not empty:
+                put(line, f'{badge}{LABELS[row["state"]]}',
+                    status_attr | (curses.A_REVERSE if row['id'] == selected else 0), x=7)
             if row.get('slot') == current_slot and row['id'].startswith('pair:'):
                 highlight = curses.A_BOLD | (curses.color_pair(5) if curses.has_colors()
                                              else curses.A_STANDOUT)
