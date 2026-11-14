@@ -30,7 +30,7 @@ def run(screen, client):
     screen.keypad(True)
     screen.timeout(100)
     curses.set_escdelay(25)
-    curses.mouseinterval(0)  # One press navigates immediately, without click delay.
+    curses.mouseinterval(0)  # Handle press/release explicitly, without double-click delay.
     curses.mousemask(curses.ALL_MOUSE_EVENTS)
     if curses.has_colors():
         curses.start_color()
@@ -132,11 +132,17 @@ def run(screen, client):
                 continue
             if buttons & curses.BUTTON4_PRESSED and rows:
                 selected = rows[max(0, index - 3)]['id']
+                attention_cursor = None
             elif buttons & getattr(curses, 'BUTTON5_PRESSED', 0) and rows:
                 selected = rows[min(len(rows) - 1, index + 3)]['id']
-            elif buttons & (curses.BUTTON1_PRESSED | curses.BUTTON1_CLICKED):
+                attention_cursor = None
+            elif buttons & (curses.BUTTON1_PRESSED | curses.BUTTON1_RELEASED |
+                            curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED):
                 target = top + y - 1
                 if 1 <= y <= visible and 0 <= target < len(rows):
                     selected = rows[target]['id']
                     attention_cursor = rows[target].get('target')
-                    navigate(selected)
+                    # VTE may consume the first press to focus an inactive terminal.
+                    # A release alone must work; press+release must navigate once.
+                    if not buttons & curses.BUTTON1_PRESSED:
+                        navigate(selected)
