@@ -15,6 +15,8 @@ class Model:
         self.sessions = {}
         self.rollouts = {}
         self.focused = {}
+        self.focus_sequence = 0
+        self.last_focus = None
         self.current_slot = None
         self.visible_slots = []
         self.error = ''
@@ -39,6 +41,9 @@ class Model:
 
     def reconcile(self, live, window_list):
         by_id = {window['con_id']: window for window in window_list}
+        current = next((w for w in window_list if w['focused']), None)
+        if current and current['con_id'] != self.last_focus:
+            self.remember_focus(current['con_id'])
         names = self.titles.names
         for sid, process in live.items():
             session = self.sessions.setdefault(sid, dict(
@@ -76,14 +81,18 @@ class Model:
             session['located'] = window is not None
             if window and window['focused']:
                 session['seen'] = state.completion
-                if pair and match_title(session['name'], window['title']):
-                    self.focused[pair['slot']] = sid
             session['unread'] = (state.state == 'done' and state.completion is not None
                                  and state.completion != session['seen'])
         for sid, session in self.sessions.items():
             if sid not in live:
                 session.update(alive=False, state='exited', unread=False, located=False)
                 self.rollouts.pop(sid, None)
+
+    def remember_focus(self, con_id):
+        """Retain brief focus visits even if the next snapshot is already on the TUI."""
+        self.focus_sequence += 1
+        self.focused[con_id] = self.focus_sequence
+        self.last_focus = con_id
 
     def snapshot(self):
         rows = []
@@ -94,8 +103,7 @@ class Model:
                              key=lambda s: s['order'])
             if members:
                 agents.extend(dict(s, pair=pair['label']) for s in members)
-                representative = next((s for s in members
-                                       if s['id'] == self.focused.get(pair['slot'])), members[0])
+                representative = max(members, key=lambda s: self.focused.get(s['con_id'], 0))
                 rows.append(dict(representative, id=f'pair:{pair["slot"]}', kind='pair',
                                  target=representative['id'], pair=pair['label'],
                                  member_ids=[s['id'] for s in members], count=len(members),

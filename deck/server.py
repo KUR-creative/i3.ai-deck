@@ -141,9 +141,16 @@ def serve(path):
                 watcher = subprocess.Popen(
                     ['i3-msg', '-m', '-t', 'subscribe', '["window","workspace"]'],
                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-                for _ in watcher.stdout:
+                for line in watcher.stdout:
                     if stopped.is_set():
                         break
+                    try:
+                        event = json.loads(line)
+                        if event.get('change') == 'focus' and event.get('container', {}).get('id'):
+                            with server.model_lock:
+                                model.remember_focus(event['container']['id'])
+                    except (ValueError, AttributeError):
+                        pass
                     changed.set()
             except OSError:
                 pass  # Periodic refresh still tracks location if subscription fails.

@@ -78,6 +78,23 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(len([r for r in rows if r['kind'] == 'empty']), 10)
         self.assertEqual(rows[-1]['state'], 'exited')
 
+    def test_brief_focus_visit_updates_title_after_return_to_tui(self):
+        model = self.model
+        model.titles.names.update(s='agent', other='second')
+        live = self.process()
+        live['other'] = dict(live['s'], pid=200)
+        other = dict(self.window(), con_id=456, title='second | project')
+        model.reconcile(live, [self.window(), other])
+        model.remember_focus(456)
+        model.remember_focus(999)  # TUI regains focus before the next snapshot.
+        model.reconcile(live, [self.window(), other])
+        row = next(r for r in model.snapshot()['rows'] if r['id'] == 'pair:3')
+        self.assertEqual(row['name'], 'second')
+        # Moving that window preserves its focus history in the destination pair.
+        model.reconcile(live, [self.window(4), dict(other, number=4)])
+        row = next(r for r in model.snapshot()['rows'] if r['id'] == 'pair:4')
+        self.assertEqual(row['name'], 'second')
+
     def test_duplicate_title_does_not_guess(self):
         model = self.model
         model.titles.names.update(s='agent', other='agent')
