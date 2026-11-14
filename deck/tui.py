@@ -38,8 +38,10 @@ def run(screen, client):
         for number, color in enumerate((curses.COLOR_GREEN, curses.COLOR_YELLOW,
                                         curses.COLOR_CYAN, curses.COLOR_WHITE), 1):
             curses.init_pair(number, color, -1)
+        curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_CYAN)
     selected, top, message = None, 0, ''
     rows, agents, error, last_poll = [], [], '', 0
+    current_slot = None
     attention_cursor = None
 
     def navigate(sid):
@@ -56,6 +58,7 @@ def run(screen, client):
             snapshot = client.request()
             rows, error = snapshot['rows'], snapshot['error']
             agents = snapshot['agents']
+            current_slot = snapshot.get('current_slot')
             if selected not in {row['id'] for row in rows}:
                 selected = rows[0]['id'] if rows else None
             last_poll = time.monotonic()
@@ -76,7 +79,8 @@ def run(screen, client):
                 except curses.error:
                     pass
 
-        put(0, 'i3.ai-deck  쌍 / 상태 / 에이전트', curses.A_BOLD)
+        current = f'현재 F{current_slot}/{current_slot % 10}' if current_slot else '현재 쌍 확인 중'
+        put(0, f'i3.ai-deck  {current}', curses.A_BOLD)
         for line, row in enumerate(rows[top:top + visible], 1):
             empty = row['state'] in ('empty', 'exited')
             color = {'working': 1, 'waiting': 2, 'done': 3}.get(row['state'], 4)
@@ -93,6 +97,10 @@ def run(screen, client):
                 extra += f' [확인 {row["attention_count"]}]'
             put(line, f'{row["pair"]:6} {badge}{LABELS[row["state"]]}  '
                       f'{row["name"]}{extra}{location}', attr)
+            if row.get('slot') == current_slot and row['id'].startswith('pair:'):
+                highlight = curses.A_BOLD | (curses.color_pair(5) if curses.has_colors()
+                                             else curses.A_STANDOUT)
+                put(line, f'{row["pair"]:6}', highlight)
         put(height - 2, message or error, curses.A_BOLD)
         put(height - 1, 'j/k 이동 · Enter 열기 · n 다음 확인 · 클릭 열기 · q 닫기')
         screen.refresh()

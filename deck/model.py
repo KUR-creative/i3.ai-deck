@@ -15,6 +15,8 @@ class Model:
         self.sessions = {}
         self.rollouts = {}
         self.focused = {}
+        self.current_slot = None
+        self.visible_slots = []
         self.error = ''
 
     def refresh(self):
@@ -22,6 +24,13 @@ class Model:
         live = discover()
         try:
             window_list = i3.windows(i3.ipc('get_tree'))
+            workspaces = i3.ipc('get_workspaces')
+            self.visible_slots = sorted({pair['slot'] for ws in workspaces
+                                         if ws['visible']
+                                         and (pair := i3.pair_for(ws['num'], self.pairs))})
+            current = next((ws for ws in workspaces if ws['focused']), None)
+            pair = i3.pair_for(current['num'], self.pairs) if current else None
+            self.current_slot = pair['slot'] if pair else None
             self.error = ''
         except (OSError, ValueError, RuntimeError) as error:
             self.error = str(error)
@@ -106,7 +115,8 @@ class Model:
         agents.extend(unplaced)
         rows.extend(dict(s, pair='종료', kind='agent') for s in self.sessions.values()
                     if not s.get('alive'))
-        return dict(rows=rows, agents=agents, error=self.error)
+        return dict(rows=rows, agents=agents, error=self.error,
+                    current_slot=self.current_slot, visible_slots=self.visible_slots)
 
     def navigate(self, sid):
         # Read the latest location before constructing a command, even if re-sorted.

@@ -111,6 +111,16 @@ class ModelTests(unittest.TestCase):
             if row['slot'] in (2, 3):
                 self.assertEqual(row['state'], 'unmapped')
 
+    def test_current_pair_comes_from_actual_focused_workspace(self):
+        model = self.model
+        visible = [dict(num=13, visible=True, focused=False),
+                   dict(num=3, visible=True, focused=True)]
+        with patch('deck.model.discover', return_value={}), patch('deck.i3.ipc') as ipc:
+            ipc.side_effect = [dict(nodes=[]), visible]
+            model.refresh()
+        self.assertEqual(model.snapshot()['current_slot'], 3)
+        self.assertEqual(model.snapshot()['visible_slots'], [3])
+
     def test_next_attention_skips_empty_working_exited_and_wraps(self):
         rows = [dict(id='empty', state='empty'),
                 dict(id='done', state='done', unread=True, located=True, alive=True),
