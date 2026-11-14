@@ -33,11 +33,11 @@ class ModelTests(unittest.TestCase):
         model = self.model
         model.titles.names['s'] = 'agent'
         model.reconcile(self.process(), [self.window()])
-        row = next(r for r in model.snapshot()['rows'] if r['id'] == 's')
+        row = next(r for r in model.snapshot()['rows'] if r.get('target') == 's')
         self.assertEqual(row['pair'], 'F3/3')
         self.assertTrue(row['unread'])
         model.reconcile(self.process(), [self.window(18)])
-        row = next(r for r in model.snapshot()['rows'] if r['id'] == 's')
+        row = next(r for r in model.snapshot()['rows'] if r.get('target') == 's')
         self.assertEqual(row['pair'], 'F8/8')
         self.assertEqual(focus_command(pair_for(18, model.pairs), 123),
                          'workspace --no-auto-back-and-forth number 18; '
@@ -45,6 +45,26 @@ class ModelTests(unittest.TestCase):
         with patch.object(model, 'refresh'), patch('deck.i3.focus') as focus:
             model.navigate('s')
             focus.assert_called_once_with(model.pairs[7], 123)
+
+    def test_one_row_per_pair_tracks_focused_agent_and_hidden_attention(self):
+        model = self.model
+        model.titles.names.update(s='agent', other='second')
+        live = self.process()
+        live['other'] = dict(live['s'], pid=200)
+        other = dict(self.window(focused=True), con_id=456, title='second | project')
+        model.reconcile(live, [self.window(), other])
+        rows = model.snapshot()['rows']
+        self.assertEqual(len(rows), 10)
+        row = next(r for r in rows if r['id'] == 'pair:3')
+        self.assertEqual((row['name'], row['count']), ('second', 2))
+        self.assertEqual(row['attention_count'], 1)
+        self.assertEqual(next_attention(model.snapshot()['agents'], 'other'), 's')
+        model.reconcile(live, [self.window(), dict(other, focused=False)])
+        row = next(r for r in model.snapshot()['rows'] if r['id'] == 'pair:3')
+        self.assertEqual(row['name'], 'second')  # Retain when the TUI gains focus.
+        with patch.object(model, 'refresh'), patch('deck.i3.focus') as focus:
+            model.navigate('pair:3')
+            focus.assert_called_once_with(model.pairs[2], 456)
 
     def test_only_actual_focus_clears_completion_and_exit_goes_last(self):
         model = self.model

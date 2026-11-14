@@ -14,6 +14,7 @@ class Model:
         self.titles = Titles(home)
         self.sessions = {}
         self.rollouts = {}
+        self.focused = {}
         self.error = ''
 
     def refresh(self):
@@ -57,6 +58,8 @@ class Model:
             session['located'] = window is not None
             if window and window['focused']:
                 session['seen'] = state.completion
+                if pair and match_title(session['name'], window['title']):
+                    self.focused[pair['slot']] = sid
             session['unread'] = (state.state == 'done' and state.completion is not None
                                  and state.completion != session['seen'])
         for sid, session in self.sessions.items():
@@ -67,19 +70,30 @@ class Model:
     def snapshot(self):
         rows = []
         active = [s for s in self.sessions.values() if s.get('alive')]
+        agents = []
         for pair in self.pairs:
             members = sorted((s for s in active if s['slot'] == pair['slot']),
                              key=lambda s: s['order'])
             if members:
-                rows.extend(dict(s, pair=pair['label'], kind='agent') for s in members)
+                agents.extend(dict(s, pair=pair['label']) for s in members)
+                representative = next((s for s in members
+                                       if s['id'] == self.focused.get(pair['slot'])), members[0])
+                rows.append(dict(representative, id=f'pair:{pair["slot"]}', kind='pair',
+                                 target=representative['id'], pair=pair['label'],
+                                 member_ids=[s['id'] for s in members], count=len(members),
+                                 attention_count=sum(needs_attention(s) for s in members),
+                                 unread=any(s['unread'] for s in members)))
             else:
                 rows.append(dict(id=f'pair:{pair["slot"]}', kind='empty',
                                  slot=pair['slot'], pair=pair['label'], name='에이전트 없음',
-                                 state='empty', unread=False, located=True))
-        rows.extend(dict(s, pair='?', kind='agent') for s in active if s['slot'] is None)
+                                 state='empty', unread=False, located=True, target=None))
+        unplaced = [dict(s, pair='?', kind='agent', target=s['id'])
+                    for s in active if s['slot'] is None]
+        rows.extend(unplaced)
+        agents.extend(unplaced)
         rows.extend(dict(s, pair='종료', kind='agent') for s in self.sessions.values()
                     if not s.get('alive'))
-        return dict(rows=rows, error=self.error)
+        return dict(rows=rows, agents=agents, error=self.error)
 
     def navigate(self, sid):
         # Read the latest location before constructing a command, even if re-sorted.
@@ -87,13 +101,21 @@ class Model:
         if sid.startswith('pair:'):
             slot = int(sid.split(':')[1])
             pair = next(pair for pair in self.pairs if pair['slot'] == slot)
-            i3.focus(pair)
-        else:
+            row = next(row for row in self.snapshot()['rows'] if row['id'] == sid)
+            sid = row['target']
+            if sid is None:
+                i3.focus(pair)
+        if sid is not None:
             session = self.sessions.get(sid)
             if not session or not session['alive'] or not session['located']:
                 raise ValueError('이 세션의 i3 창을 확인할 수 없습니다.')
             i3.focus(i3.pair_for(session['number'], self.pairs), session['con_id'])
         self.refresh()
+
+
+def needs_attention(session):
+    return bool(session.get('alive') and (
+        session['state'] == 'waiting' or session.get('unread')))
 
 
 def next_attention(rows, selected):
@@ -102,7 +124,6 @@ def next_attention(rows, selected):
     start = next((i for i, row in enumerate(rows) if row['id'] == selected), -1)
     for step in range(1, len(rows) + 1):
         row = rows[(start + step) % len(rows)]
-        if row.get('located') and row.get('alive') and (
-                row['state'] == 'waiting' or row.get('unread')):
+        if row.get('located') and needs_attention(row):
             return row['id']
     return None

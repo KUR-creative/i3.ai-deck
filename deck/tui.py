@@ -39,7 +39,8 @@ def run(screen, client):
                                         curses.COLOR_CYAN, curses.COLOR_WHITE), 1):
             curses.init_pair(number, color, -1)
     selected, top, message = None, 0, ''
-    rows, error, last_poll = [], '', 0
+    rows, agents, error, last_poll = [], [], '', 0
+    attention_cursor = None
 
     def navigate(sid):
         nonlocal message, last_poll
@@ -54,6 +55,7 @@ def run(screen, client):
         if time.monotonic() - last_poll >= 0.3:
             snapshot = client.request()
             rows, error = snapshot['rows'], snapshot['error']
+            agents = snapshot['agents']
             if selected not in {row['id'] for row in rows}:
                 selected = rows[0]['id'] if rows else None
             last_poll = time.monotonic()
@@ -86,8 +88,11 @@ def run(screen, client):
             badge = '!' if row.get('unread') else ' '
             location = ' [위치 불명]' if row['kind'] == 'agent' and not row['located'] \
                 and row.get('alive') else ''
+            extra = f' (+{row["count"] - 1})' if row.get('count', 1) > 1 else ''
+            if row.get('attention_count'):
+                extra += f' [확인 {row["attention_count"]}]'
             put(line, f'{row["pair"]:6} {badge}{LABELS[row["state"]]}  '
-                      f'{row["name"]}{location}', attr)
+                      f'{row["name"]}{extra}{location}', attr)
         put(height - 2, message or error, curses.A_BOLD)
         put(height - 1, 'j/k 이동 · Enter 열기 · n 다음 확인 · 클릭 열기 · q 닫기')
         screen.refresh()
@@ -97,12 +102,18 @@ def run(screen, client):
         if key in (ord('j'), curses.KEY_DOWN, ord('k'), curses.KEY_UP) and rows:
             delta = 1 if key in (ord('j'), curses.KEY_DOWN) else -1
             selected = rows[min(max(0, index + delta), len(rows) - 1)]['id']
+            attention_cursor = None
         elif key in (10, 13, curses.KEY_ENTER) and selected:
+            attention_cursor = next((r.get('target') for r in rows if r['id'] == selected), None)
             navigate(selected)
         elif key == ord('n'):
-            target = next_attention(rows, selected)
+            current = attention_cursor or next(
+                (r.get('target') for r in rows if r['id'] == selected), None)
+            target = next_attention(agents, current)
             if target:
-                selected = target
+                attention_cursor = target
+                selected = next((r['id'] for r in rows if target in r.get('member_ids', [])
+                                 or r['id'] == target), selected)
                 navigate(target)
             else:
                 message = '다음 확인 대상이 없습니다.'
@@ -119,4 +130,5 @@ def run(screen, client):
                 target = top + y - 1
                 if 1 <= y <= visible and 0 <= target < len(rows):
                     selected = rows[target]['id']
+                    attention_cursor = rows[target].get('target')
                     navigate(selected)
