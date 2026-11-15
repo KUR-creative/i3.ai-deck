@@ -67,7 +67,7 @@ class ModelTests(unittest.TestCase):
             model.navigate('other')
             focus.assert_called_once_with(model.pairs[2], 456)
 
-    def test_only_actual_focus_clears_completion_and_exit_goes_last(self):
+    def test_only_actual_focus_clears_completion_and_exit_hides_the_row(self):
         model = self.model
         model.titles.names['s'] = 'agent'
         model.reconcile(self.process(), [self.window()])
@@ -77,7 +77,9 @@ class ModelTests(unittest.TestCase):
         model.reconcile({}, [])
         rows = model.snapshot()['rows']
         self.assertEqual(len([r for r in rows if r['kind'] == 'empty']), 20)
-        self.assertEqual(rows[-1]['state'], 'exited')
+        self.assertEqual(len(rows), 20)
+        self.assertFalse(any(r['id'] == 's' for r in rows))
+        self.assertFalse(model.sessions['s']['alive'])
 
     def test_brief_focus_acknowledges_without_reordering_or_replacing_titles(self):
         model = self.model

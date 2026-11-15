@@ -126,9 +126,6 @@ class Model:
                     for s in active if s['slot'] is None]
         rows.extend(unplaced)
         agents.extend(unplaced)
-        rows.extend(dict(s, pair='[×]', workspace_label='-', kind='agent', focused=False)
-                    for s in self.sessions.values()
-                    if not s.get('alive'))
         return dict(rows=rows, agents=agents, error=self.error,
                     current_slot=self.current_slot, current_number=self.current_number,
                     visible_slots=self.visible_slots)
