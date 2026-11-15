@@ -5,7 +5,7 @@ import time
 from .text import fit
 
 
-LABELS = dict(working='● 작업 중', waiting='? 질문', done='○ 완료', idle='· 유휴',
+LABELS = dict(working='● run', waiting='? wait', done='○ done', idle='· 유휴',
               exited='× 종료', unknown='? 확인 불가', empty='etc', unmapped='? 연결 불명')
 
 
@@ -85,21 +85,23 @@ def run(screen, client):
                 attr |= curses.A_REVERSE
             label = LABELS[row['state']]
             if row['state'] == 'done' and row.get('unread'):
-                label = '● 완료'
+                label = '● done'
+            circle = label[0] in ('●', '○')
+            status, status_x = (label[2:], 13) if circle else (f' {label}', 9)
             location = ' [위치 불명]' if row['kind'] == 'agent' and not row['located'] \
                 and row.get('alive') else ''
             pair = row['pair'] if row['pair'] != previous_pair else ''
             workspace = row['workspace_label'] if row.get('number') != previous_number or pair else ''
             put(line, ' ' * (width - 1), attr)
             put(line, f'{pair:3} {workspace:>2}', attr)
-            put(line, f' {label}', attr, x=9)
+            put(line, status, attr, x=status_x)
             put(line, row['name'] + location, attr, x=23)
             if not empty and connected:
-                put(line, f' {label}',
-                    status_attr | (curses.A_REVERSE if row['id'] == selected else 0), x=9)
-            if label[0] in ('●', '○'):
-                # Keep the circle's original colors; only the text follows selection.
-                put(line, label[0], status_attr if connected else curses.A_DIM, x=10)
+                put(line, status,
+                    status_attr | (curses.A_REVERSE if row['id'] == selected else 0), x=status_x)
+            if circle:
+                # Reserve two cells: some fallback fonts draw circles beyond one cell.
+                put(line, label[0] + ' ', status_attr if connected else curses.A_DIM, x=10)
             in_workspace = row['kind'] == 'empty' or (row.get('alive') and row.get('located'))
             if connected and in_workspace and pair and row.get('slot') == current_slot:
                 put(line, pair, highlight)

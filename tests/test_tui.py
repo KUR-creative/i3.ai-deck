@@ -57,11 +57,11 @@ class MouseTests(unittest.TestCase):
                     stack.enter_context(patch('deck.tui.curses.color_pair', side_effect=lambda n: n << 8))
                     run(screen, IconClient())
                 color = (1 if state == 'working' else 3) << 8
-                self.assertIn((0, 10, symbol, color), screen.drawn)
+                self.assertIn((0, 10, symbol + ' ', color), screen.drawn)
                 self.assertFalse(any(attr & curses.A_REVERSE for y, x, _, attr in screen.drawn
                                      if y == 0 and x == 10))
                 self.assertTrue(any(attr == color | curses.A_REVERSE for y, x, _, attr in screen.drawn
-                                    if y == 0 and x == 9))
+                                    if y == 0 and x == 13))
                 self.assertIn((0, 23, 'agent A', curses.A_REVERSE), screen.drawn)
 
     def test_completion_circles_distinguish_unread_and_read(self):
@@ -79,7 +79,8 @@ class MouseTests(unittest.TestCase):
                         stack.enter_context(patch('deck.tui.curses.' + name))
                     stack.enter_context(patch('deck.tui.curses.has_colors', return_value=False))
                     run(screen, DoneClient())
-                self.assertIn((1, 9, f' {symbol} 완료', 0), screen.drawn)
+                self.assertIn((1, 10, symbol + ' ', 0), screen.drawn)
+                self.assertIn((1, 13, 'done', 0), screen.drawn)
                 self.assertFalse(any('!' in text for _, _, text, _ in screen.drawn))
 
     def run_keys(self, keys, client=None):
@@ -175,7 +176,7 @@ class MouseTests(unittest.TestCase):
         self.assertIn((0, 0, '[0]', highlight), screen.drawn)
         self.assertIn((0, 4, 'F0', highlight), screen.drawn)
         self.assertIn((0, 7, '>', highlight), screen.drawn)
-        self.assertTrue(any(y == 1 and x == 9 and '완료' in text and attr == 3 << 8
+        self.assertTrue(any(y == 1 and x == 13 and text == 'done' and attr == 3 << 8
                             for y, x, text, attr in screen.drawn))
         self.assertFalse(any(y == 1 and attr & (5 << 8) == 5 << 8
                              for y, x, text, attr in screen.drawn))
