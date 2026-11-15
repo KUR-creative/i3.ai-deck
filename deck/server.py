@@ -85,7 +85,7 @@ class Handler(socketserver.StreamRequestHandler):
                         self.server.model.navigate(request['id'])
                         result = self.server.model.snapshot()
                     elif action == 'next':
-                        result = self.server.model.navigate_next(request.get('after'))
+                        result = self.server.model.select_next(request.get('after'))
                     elif action == 'stop':
                         stop, result = True, None
                     else:

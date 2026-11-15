@@ -66,6 +66,9 @@ class MouseTests(unittest.TestCase):
         client = NextClient()
         self.assertEqual(self.run_keys([ord('j'), ord('n'), ord('n'), ord('q')], client),
                          [('next', 'b'), ('next', 'a')])
+        client = NextClient()
+        self.assertEqual(self.run_keys([ord('j'), ord('n'), 10, ord('q')], client),
+                         [('next', 'b'), 'a'])
 
     def exercise(self, buttons):
         screen = Screen([curses.KEY_MOUSE] * len(buttons) + [ord('q')])

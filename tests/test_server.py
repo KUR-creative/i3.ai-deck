@@ -18,10 +18,8 @@ class FakeModel:
             raise ValueError('missing agent')
         self.selected = sid
 
-    def navigate_next(self, after=None):
+    def select_next(self, after=None):
         target = 'agent' if self.selected is None else None
-        if target:
-            self.navigate(target)
         return dict(target=target, snapshot=self.snapshot())
 
 
@@ -40,6 +38,7 @@ class ServerTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, 'missing agent'):
                         a.request('focus', id='missing')
                     self.assertEqual(a.request('next')['target'], 'agent')
+                    self.assertFalse(b.request()['rows'][0]['seen'])
                     a.request('focus', id='agent')
                     self.assertTrue(b.request()['rows'][0]['seen'])
                     self.assertIsNone(b.request('next', after='agent')['target'])

@@ -150,11 +150,9 @@ class Model:
             i3.focus(i3.pair_for(session['number'], self.pairs), session['con_id'])
         self.refresh()
 
-    def navigate_next(self, after=None):
+    def select_next(self, after=None):
         self.refresh()
-        target = next_attention(self.snapshot()['agents'], after)
-        if target:
-            self.navigate(target)
+        target = next_attention(self.snapshot()['rows'], after)
         return dict(target=target, snapshot=self.snapshot())
 
 

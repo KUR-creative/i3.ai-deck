@@ -98,7 +98,7 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(row['name'], 'second')
         self.assertEqual(row['pair'], '[4]')
 
-    def test_next_visits_hidden_agent_then_stops_after_acknowledgement(self):
+    def test_next_only_selects_until_explicit_navigation_acknowledges(self):
         model = self.model
         model.titles.names.update(s='agent', other='second')
         live = self.process()
@@ -108,11 +108,22 @@ class ModelTests(unittest.TestCase):
         model.remember_focus(456)
         with patch.object(model, 'refresh') as refresh, patch('deck.i3.focus') as focus:
             focus.side_effect = lambda pair, con_id: model.remember_focus(con_id)
-            result = model.navigate_next('other')
+            result = model.select_next('other')
             self.assertEqual(result['target'], 's')
             self.assertTrue(refresh.called)
+            focus.assert_not_called()
+            self.assertTrue(model.sessions['s']['unread'])
+            model.navigate(result['target'])
             self.assertFalse(model.sessions['s']['unread'])
-            self.assertIsNone(model.navigate_next('s')['target'])
+            self.assertIsNone(model.select_next('s')['target'])
+
+    def test_next_from_empty_workspace_respects_current_list_position(self):
+        model = self.model
+        model.titles.names['s'] = 'agent'
+        model.reconcile(self.process(), [self.window(3)])
+        with patch.object(model, 'refresh'), patch('deck.i3.focus') as focus:
+            self.assertEqual(model.select_next('workspace:12')['target'], 's')
+            focus.assert_not_called()
 
     def test_duplicate_title_does_not_guess(self):
         model = self.model

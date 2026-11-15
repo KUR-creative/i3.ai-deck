@@ -27,7 +27,6 @@ def run(screen, client):
     rows, error, last_poll = [], '', 0
     current_slot = None
     current_number = None
-    attention_cursor = None
 
     def navigate(sid):
         nonlocal message, last_poll
@@ -97,7 +96,7 @@ def run(screen, client):
                 put(line, '>', highlight, x=7)
             previous_pair, previous_number = row['pair'], row.get('number')
         put(height - 2, message or error, curses.A_BOLD)
-        put(height - 1, 'j/k 이동 · g/G 처음/끝 · Enter 열기 · n 다음 확인 · 클릭 열기 · q 닫기')
+        put(height - 1, 'j/k 선택 · g/G 처음/끝 · n 다음 확인 선택 · Enter 열기 · 클릭 열기 · q 닫기')
         screen.refresh()
         key = screen.getch()
         if key in (ord('q'), 27):
@@ -105,18 +104,13 @@ def run(screen, client):
         if key in (ord('j'), curses.KEY_DOWN, ord('k'), curses.KEY_UP) and rows:
             delta = 1 if key in (ord('j'), curses.KEY_DOWN) else -1
             selected = rows[min(max(0, index + delta), len(rows) - 1)]['id']
-            attention_cursor = None
         elif key in (ord('g'), ord('G')) and rows:
             selected = rows[0 if key == ord('g') else -1]['id']
-            attention_cursor = None
         elif key in (10, 13, curses.KEY_ENTER) and selected:
-            attention_cursor = next((r.get('target') for r in rows if r['id'] == selected), None)
             navigate(selected)
         elif key == ord('n'):
-            current = attention_cursor or next(
-                (r.get('target') for r in rows if r['id'] == selected), None)
             try:
-                result = client.request('next', after=current)
+                result = client.request('next', after=selected)
             except ValueError as problem:
                 message = str(problem)
                 continue
@@ -127,7 +121,6 @@ def run(screen, client):
             current_number = snapshot.get('current_number')
             last_poll = 0
             if target:
-                attention_cursor = target
                 selected = target
                 message = ''
             else:
@@ -139,16 +132,13 @@ def run(screen, client):
                 continue
             if buttons & curses.BUTTON4_PRESSED and rows:
                 selected = rows[max(0, index - 3)]['id']
-                attention_cursor = None
             elif buttons & getattr(curses, 'BUTTON5_PRESSED', 0) and rows:
                 selected = rows[min(len(rows) - 1, index + 3)]['id']
-                attention_cursor = None
             elif buttons & (curses.BUTTON1_PRESSED | curses.BUTTON1_RELEASED |
                             curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED):
                 target = top + y
                 if 0 <= y < visible and 0 <= target < len(rows):
                     selected = rows[target]['id']
-                    attention_cursor = rows[target].get('target')
                     # VTE may consume the first press to focus an inactive terminal.
                     # A release alone must work; press+release must navigate once.
                     if not buttons & curses.BUTTON1_PRESSED:
