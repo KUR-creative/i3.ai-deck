@@ -2,7 +2,7 @@
 import json
 import time
 
-from .server import Client
+from .client import Client
 
 
 class ReconnectingClient:

@@ -7,7 +7,8 @@ import locale
 from pathlib import Path
 import sys
 
-from deck.server import connect, default_socket, serve
+from deck.client import connect, default_socket
+from deck.server import serve
 from deck.connection import ReconnectingClient
 from deck.tui import run
 

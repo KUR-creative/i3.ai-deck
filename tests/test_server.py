@@ -3,7 +3,8 @@ import tempfile
 import threading
 import unittest
 
-from deck.server import Client, Handler, Server
+from deck.client import Client
+from deck.server import Handler, Server
 
 
 class FakeModel:

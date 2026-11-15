@@ -5,7 +5,8 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-from deck.server import Client, serve
+from deck.client import Client
+from deck.server import serve
 
 
 class CompletionServerTests(unittest.TestCase):
