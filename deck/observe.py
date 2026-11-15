@@ -38,20 +38,20 @@ def discover(proc=Path('/proc')):
                         paths.add(Path(target))
                 except OSError:
                     pass
-            primary = []
             for path in paths:
                 try:
                     with path.open('rb') as stream:
                         meta = json.loads(stream.readline()).get('payload', {})
-                    if meta.get('source') == 'cli' and meta.get('id'):
-                        primary.append((path.stat().st_mtime_ns, path, meta))
+                    source = meta.get('source')
+                    user_thread = meta.get('thread_source') == 'user'
+                    legacy_user = 'thread_source' not in meta and source in ('cli', 'vscode')
+                    if (user_thread or legacy_user) and isinstance(source, str) and meta.get('id'):
+                        # Resuming keeps the original source (including 'vscode').
+                        # A shared backend may hold several live user rollouts.
+                        found[meta['id']] = dict(path=path, pid=int(process.name),
+                                                 cwd=meta.get('cwd', ''))
                 except (OSError, ValueError):
                     continue
-            if primary:
-                # A resumed CLI can retain an old FD; use its latest user rollout.
-                _, path, meta = max(primary, key=lambda item: item[0])
-                found[meta['id']] = dict(path=path, pid=int(process.name),
-                                         cwd=meta.get('cwd', ''))
         except OSError:
             continue
     return found
