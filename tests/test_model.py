@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from deck.i3 import focus_command, pair_for
-from deck.model import Model, next_attention
+from deck.model import Model, next_agent
 
 
 class ModelTests(unittest.TestCase):
@@ -58,7 +58,7 @@ class ModelTests(unittest.TestCase):
         agents = [r for r in rows if r['slot'] == 3 and r['kind'] == 'agent']
         self.assertEqual([r['name'] for r in agents], ['agent', 'second'])
         self.assertEqual([r['id'] for r in agents if r['focused']], ['other'])
-        self.assertEqual(next_attention(model.snapshot()['agents'], 'other'), 's')
+        self.assertEqual(next_agent(model.snapshot()['agents'], 'other'), 's')
         model.reconcile(live, [self.window(), dict(other, focused=False)])
         agents = [r for r in model.snapshot()['rows'] if r['kind'] == 'agent']
         self.assertEqual([r['name'] for r in agents], ['agent', 'second'])
@@ -171,17 +171,40 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(model.snapshot()['current_number'], 3)
         self.assertEqual(model.snapshot()['visible_slots'], [3])
 
-    def test_next_attention_skips_empty_working_exited_and_wraps(self):
+    def test_next_agent_skips_empty_working_exited_and_wraps(self):
         rows = [dict(id='empty', state='empty'),
                 dict(id='done', state='done', unread=True, located=True, alive=True),
                 dict(id='work', state='working', located=True, alive=True),
                 dict(id='wait', state='waiting', located=True, alive=True)]
-        self.assertEqual(next_attention(rows, 'done'), 'wait')
-        self.assertEqual(next_attention(rows, 'wait'), 'done')
-        self.assertEqual(next_attention(rows, 'wait', reverse=True), 'done')
-        self.assertEqual(next_attention(rows, 'done', reverse=True), 'wait')
-        self.assertEqual(next_attention(rows, None, reverse=True), 'wait')
-        self.assertIsNone(next_attention(rows[:1], 'empty'))
+        self.assertEqual(next_agent(rows, 'done'), 'wait')
+        self.assertEqual(next_agent(rows, 'wait'), 'done')
+        self.assertEqual(next_agent(rows, 'wait', reverse=True), 'done')
+        self.assertEqual(next_agent(rows, 'done', reverse=True), 'wait')
+        self.assertEqual(next_agent(rows, None, reverse=True), 'wait')
+        self.assertIsNone(next_agent(rows[:1], 'empty'))
+
+    def test_all_states_includes_read_done_working_idle_and_waiting(self):
+        rows = [dict(id='empty', kind='empty', located=True)]
+        for state in ('done', 'working', 'idle', 'waiting'):
+            rows.append(dict(id=state, kind='agent', state=state, alive=True,
+                             unread=False, located=True))
+        rows.extend([dict(id='exited', kind='agent', alive=False, located=True),
+                     dict(id='unmapped', kind='agent', alive=True, located=False)])
+        for after, expected in [('empty', 'done'), ('done', 'working'), ('working', 'idle'),
+                                ('idle', 'waiting'), ('waiting', 'done')]:
+            self.assertEqual(next_agent(rows, after, all_states=True), expected)
+        self.assertIsNone(next_agent(rows[:1], 'empty', all_states=True))
+
+    def test_select_all_states_uses_fresh_rows_without_acknowledging(self):
+        model = self.model
+        model.titles.names['s'] = 'agent'
+        model.reconcile(self.process(), [self.window(focused=True)])
+        self.assertFalse(model.sessions['s']['unread'])
+        with patch.object(model, 'refresh') as refresh, patch('deck.i3.focus') as focus:
+            self.assertIsNone(model.select_next('workspace:12')['target'])
+            self.assertEqual(model.select_next('workspace:12', all_states=True)['target'], 's')
+            self.assertEqual(refresh.call_count, 2)
+            focus.assert_not_called()
 
     def test_zero_pair_first_left_before_right_and_empty_side_navigation(self):
         model = self.model

@@ -19,8 +19,8 @@ class FakeModel:
             raise ValueError('missing agent')
         self.selected = sid
 
-    def select_next(self, after=None, reverse=False):
-        target = 'agent' if self.selected is None else None
+    def select_next(self, after=None, reverse=False, all_states=False):
+        target = 'agent' if self.selected is None or all_states else None
         return dict(target=target, snapshot=self.snapshot())
 
 
@@ -43,6 +43,8 @@ class ServerTests(unittest.TestCase):
                     a.request('focus', id='agent')
                     self.assertTrue(b.request()['rows'][0]['seen'])
                     self.assertIsNone(b.request('next', after='agent')['target'])
+                    self.assertEqual(b.request('next', after='agent', all_states=True)['target'],
+                                     'agent')
                     a.close()
                     self.assertTrue(b.request()['rows'][0]['seen'])
                     b.request('stop')

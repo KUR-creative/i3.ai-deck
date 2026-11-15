@@ -30,7 +30,8 @@ class Handler(socketserver.StreamRequestHandler):
                         result = self.server.model.snapshot()
                     elif action == 'next':
                         result = self.server.model.select_next(request.get('after'),
-                                                               reverse=bool(request.get('reverse')))
+                                                               reverse=bool(request.get('reverse')),
+                                                               all_states=bool(request.get('all_states')))
                     elif action == 'stop':
                         stop, result = True, None
                     else:

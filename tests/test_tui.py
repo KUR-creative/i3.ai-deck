@@ -100,17 +100,17 @@ class MouseTests(unittest.TestCase):
             run(screen, client)
         return client.calls
 
-    def test_N_selects_previous_without_navigation(self):
-        class PreviousClient(Client):
+    def test_N_immediately_navigates_all_agents_and_wraps(self):
+        class AllClient(Client):
             def request(self, action='snapshot', **params):
                 snapshot = super().request('snapshot')
                 if action == 'next':
-                    self.calls.append((params['after'], params.get('reverse')))
-                    return dict(target='b', snapshot=snapshot)
+                    self.calls.append((params['after'], params.get('all_states')))
+                    return dict(target='b' if params['after'] == 'a' else 'a', snapshot=snapshot)
                 return super().request(action, **params)
 
-        self.assertEqual(self.run_keys([ord('N'), 10, ord('q')], PreviousClient()),
-                         [('a', True), 'b'])
+        self.assertEqual(self.run_keys([ord('N'), ord('N'), ord('q')], AllClient()),
+                         [('a', True), 'b', ('b', True), 'a'])
 
     def test_waiting_screen_keeps_navigation_keys_but_blocks_server_actions(self):
         class OfflineClient(Client):

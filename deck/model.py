@@ -147,9 +147,9 @@ class Model:
             i3.focus(i3.pair_for(session['number'], self.pairs), session['con_id'])
         self.refresh()
 
-    def select_next(self, after=None, reverse=False):
+    def select_next(self, after=None, reverse=False, all_states=False):
         self.refresh()
-        target = next_attention(self.snapshot()['rows'], after, reverse)
+        target = next_agent(self.snapshot()['rows'], after, reverse, all_states)
         return dict(target=target, snapshot=self.snapshot())
 
 
@@ -158,12 +158,14 @@ def needs_attention(session):
         session['state'] == 'waiting' or session.get('unread')))
 
 
-def next_attention(rows, selected, reverse=False):
+def next_agent(rows, selected, reverse=False, all_states=False):
     if not rows:
         return None
     start = next((i for i, row in enumerate(rows) if row['id'] == selected), 0 if reverse else -1)
     for step in range(1, len(rows) + 1):
         row = rows[(start + (-step if reverse else step)) % len(rows)]
-        if row.get('located') and needs_attention(row):
+        eligible = (row.get('kind') == 'agent' and row.get('alive')) if all_states \
+            else needs_attention(row)
+        if row.get('located') and eligible:
             return row['id']
     return None
