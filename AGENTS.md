@@ -6,12 +6,5 @@
   받기 전에는 수정하지 않는다. i3 이동은 IPC로 처리한다.
 - 실제 창 이동을 검증할 때는 원래 양쪽 워크스페이스와 포커스를 기록하고 복원한다.
 - 검수 가능한 시점에 사용자 입력을 기다리려면 채팅에 구체적인 검수 체크리스트를
-  제시하고 아래 명령을 실행한다. 이전 i3-nagbar 방식은 대체되었다.
-
-```bash
-notify-send -a Codex -u normal -t 0 \
-  -h string:bgcolor:'#86EFAC' \
-  -h string:fgcolor:'#052E16' \
-  'Codex' \
-  '<span size="xx-large"><b>3 작업 완료. 확인 요청 바람.</b></span>'
-```
+  제시한다. 에이전트가 notify-send나 i3-nagbar로 검수 알림을 직접 보내지 않는다.
+  완료 알림은 실행 중인 ai-deck 서버가 Codex 로그에서 감지해 전송한다.
