@@ -33,6 +33,7 @@ TUI에서 `q`를 눌러도 서버와 Codex는 유지된다.
 | q, Esc | 현재 TUI만 닫기 |
 
 ```bash
+python3 ai_deck.py --start-server # TUI 없이 백그라운드 서버만 시작 (이미 있으면 재사용)
 python3 ai_deck.py --list         # 같은 서버의 현재 상태를 JSON으로 확인
 python3 ai_deck.py --stop-server  # 서버 종료; 다음 실행 시 세션 재발견
 ```
@@ -42,12 +43,17 @@ python3 ai_deck.py --stop-server  # 서버 종료; 다음 실행 시 세션 재�
 다른 터미널에서 아래 명령으로 서버를 다시 시작하면 자동으로 연결된다.
 
 ```bash
-python3 ai_deck.py --list   # 서버가 없으면 시작하고 현재 목록만 출력
+python3 ai_deck.py --start-server
 ```
 
 대기 중에도 j/k·g/G·q를 사용할 수 있다. Enter·클릭·n/N 요청은 서버가 연결될 때까지
 실행하지 않으며 나중에 재전송하지도 않는다. 재접속 후 선택한 세션이 아직 있으면
 선택을 유지한다. 서버가 꺼졌다는 이유로 클라이언트가 서버를 강제로 되살리지는 않는다.
+즉, 서버가 없는 동안 Enter를 눌러도 서버를 다시 켠 순간 갑자기 창이 이동하지 않는다.
+원하는 시점에 Enter를 다시 누르면 된다.
+
+인자 없이 실행하면 기존처럼 필요한 서버와 TUI를 함께 연다. `--server`는 별도로
+포그라운드 서버를 실행하는 옵션이며, 일반적인 서버 전용 시작은 `--start-server`를 쓴다.
 기본 소켓·로그는 `$XDG_RUNTIME_DIR/i3-ai-deck/`에 두며, 환경 변수가 없으면
 `~/.cache/i3-ai-deck/`를 쓴다. `--socket PATH`로 테스트 서버를 분리할 수 있다.
 
@@ -149,6 +155,8 @@ workspace --no-auto-back-and-forth number "3:3";
 
 - 서버 하나가 Codex 상태 수집, i3 창 연결, 읽음 처리와 공유 상태를 소유한다.
 - TUI는 서버 상태를 표시하고 이동 요청만 보낸다. 에이전트를 실행하지 않는다.
+- `deck/server.py`는 서버 요청 처리·수집 루프, `deck/client.py`는 클라이언트 RPC와
+  필요 시 서버 시작, `deck/connection.py`는 TUI 재접속을 담당한다.
 - Unix 소켓으로 짧은 JSON 메시지를 교환한다. 웹 서버와 외부 DB는 쓰지 않는다.
 - `deck/connection.py`가 TUI의 연결 수명을 관리한다. 짧은 소켓 타임아웃과
   1초 간격의 단발 재시도로 긴 연결 대기 루프를 피한다. 별도 서비스는 추가하지 않는다.
@@ -199,6 +207,8 @@ workspace --no-auto-back-and-forth number "3:3";
 
 ## 후속 기능
 
+- 완료 확인 표시를 `!` 대신 미확인 `●`, 확인한 완료 `○`로 변경하기. 새 계획이며
+  아직 구현하지 않았다. 현재 `!`는 미확인 완료를 뜻한다.
 - 쌍 항목에 사용자 지정 이름을 붙이고 수정하기. 기본값은 대표 에이전트 제목이며,
   이 이름은 Codex 대화 rename과는 별개다. 키와 보존 정책은 구현 시 결정한다.
 - Codex의 일반 승인 대기를 정확히 감지할 수 있는 추가 이벤트 조사.
