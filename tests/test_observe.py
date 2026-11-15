@@ -6,7 +6,98 @@ import unittest
 from deck.observe import Rollout, Titles, match_title
 
 
+def question(call_id='q', count=2):
+    return {'type': 'response_item', 'payload': {
+        'type': 'function_call', 'name': 'functions.request_user_input_async',
+        'call_id': call_id, 'arguments': json.dumps({'questions': [{}] * count})}}
+
+
+def answer(call_id, *indices):
+    replies = [dict(answer='yes', questionItemId=json.dumps(
+        ['request_user_input_async', call_id, index])) for index in indices]
+    return {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
+        'content': [{'type': 'input_text', 'text': '<send_user_message_question_reply>\n'
+                    + json.dumps(replies) + '\n</send_user_message_question_reply>'}]}}
+
+
+def output(call_id, **result):
+    return {'type': 'response_item', 'payload': {'type': 'function_call_output',
+            'call_id': call_id, 'output': json.dumps(result)}}
+
+
+def event(kind, **fields):
+    return {'type': 'event_msg', 'payload': dict(type=kind, **fields)}
+
+
 class ObserveTests(unittest.TestCase):
+    def test_async_receipt_and_partial_answers_preserve_wait_across_turns(self):
+        state = Rollout()
+        state.apply(event('task_started'))
+        state.apply(question())
+        state.apply(output('q', accepted=True))
+        self.assertEqual(state.state, 'waiting')
+        state.apply(event('task_complete', turn_id='turn-1'))
+        self.assertEqual((state.state, state.completion), ('waiting', 'turn-1'))
+        state.apply(answer('other', 0, 1))
+        state.apply(answer('q', 0))
+        state.apply(event('task_started'))
+        self.assertEqual(state.state, 'waiting')
+        state.apply(answer('q', 1))
+        self.assertEqual(state.state, 'working')
+        self.assertEqual(state.questions, {})
+
+    def test_concurrent_questions_rejection_and_abort(self):
+        state = Rollout()
+        state.apply(event('task_started'))
+        state.apply(question('a', 1))
+        state.apply(question('b', 1))
+        state.apply(output('other', accepted=False))
+        state.apply(answer('a', 0))
+        self.assertEqual(state.state, 'waiting')
+        state.apply(output('b', accepted=False))
+        self.assertEqual(state.state, 'working')
+        state.apply(question('c'))
+        state.apply(event('turn_aborted'))
+        state.apply(answer('c', 0, 1))
+        self.assertEqual(state.state, 'idle')
+        self.assertEqual(state.questions, {})
+
+    def test_answered_async_question_is_not_resurrected_by_log_replay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'rollout.jsonl'
+            items = [event('task_started'), question(), output('q', accepted=True),
+                     event('task_complete', turn_id='completed'), answer('q', 0), answer('q', 1)]
+            path.write_text(''.join(json.dumps(item) + '\n' for item in items[:-1]))
+            state = Rollout()
+            state.update(path)
+            self.assertEqual(state.state, 'waiting')
+            with path.open('a') as stream:
+                stream.write(json.dumps(items[-1]) + '\n')
+            state.update(path)
+            fresh = Rollout()
+            fresh.update(path)
+            self.assertEqual((fresh.state, fresh.completion), ('done', 'completed'))
+            self.assertEqual((state.state, state.questions), (fresh.state, fresh.questions))
+
+    def test_malformed_or_unrelated_replies_cannot_clear_questions(self):
+        state = Rollout()
+        state.apply(question())
+        invalid = [answer('q', 99), answer('q', '0'), output('q', accepted=True)]
+        for text in ['?', '<send_user_message_question_reply>{bad}</send_user_message_question_reply>',
+                     '<send_user_message_question_reply>[]</send_user_message_question_reply>']:
+            invalid.append({'type': 'response_item', 'payload': {'type': 'message',
+                'role': 'user', 'content': [{'text': text}]}})
+        for item in invalid:
+            state.apply(item)
+            self.assertEqual(state.state, 'waiting')
+        self.assertEqual(state.questions, {'q': {0, 1}})
+        state.apply(answer('q', 0, 1))
+        state.apply(question('empty', 0))
+        bad = question('bad')
+        bad['payload']['arguments'] = '{'
+        state.apply(bad)
+        self.assertEqual(state.questions, {})
+
     def test_partial_write_and_incremental_completion(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'rollout.jsonl'

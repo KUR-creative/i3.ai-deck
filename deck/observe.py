@@ -19,6 +19,13 @@ def records(path, offset=0):
                 yield offset, {}
 
 
+def decode_json(text):
+    try:
+        return json.loads(text)
+    except (TypeError, ValueError):
+        return None
+
+
 def discover(proc=Path('/proc')):
     """Open rollout FDs identify sessions without scanning historical logs."""
     found = {}
@@ -83,8 +90,9 @@ class Rollout:
         self.offset = 0
         self.identity = None
         self.state = 'unknown'
+        self.activity = 'unknown'
         self.completion = None
-        self.pending_question = None
+        self.questions = {}  # call_id -> None (synchronous) or unanswered async indices
 
     def update(self, path):
         stat = path.stat()
@@ -96,28 +104,69 @@ class Rollout:
 
     def apply(self, item):
         payload = item.get('payload', {})
+        if not isinstance(payload, dict):
+            return
         kind = payload.get('type')
         if item.get('type') == 'event_msg':
             if kind == 'task_started':
-                self.state = 'working'
-                self.pending_question = None
+                self.activity = 'working'
+                self.questions = {key: value for key, value in self.questions.items()
+                                  if value is not None}
             elif kind == 'task_complete':
-                self.state = 'done'
+                self.activity = 'done'
                 self.completion = payload.get('turn_id') or item.get('timestamp')
-                self.pending_question = None
+                self.questions = {key: value for key, value in self.questions.items()
+                                  if value is not None}
             elif kind in ('turn_aborted', 'task_aborted'):
-                self.state = 'idle'
-                self.pending_question = None
+                self.activity = 'idle'
+                self.questions.clear()
         elif item.get('type') == 'response_item':
-            # Only an explicit pending request_user_input is evidence of a question.
             name = payload.get('name', '').split('.')[-1]
-            if kind == 'function_call' and name == 'request_user_input':
-                self.pending_question = payload.get('call_id')
-                self.state = 'waiting'
-            elif (kind == 'function_call_output' and self.pending_question
-                  and payload.get('call_id') == self.pending_question):
-                self.pending_question = None
-                self.state = 'working'
+            call_id = payload.get('call_id')
+            if kind == 'function_call' and isinstance(call_id, str) and call_id:
+                if name == 'request_user_input':
+                    self.questions[call_id] = None
+                elif name == 'request_user_input_async':
+                    args = decode_json(payload.get('arguments'))
+                    questions = args.get('questions') if isinstance(args, dict) else None
+                    if isinstance(questions, list) and questions:
+                        self.questions[call_id] = set(range(len(questions)))
+            elif kind == 'function_call_output' and isinstance(call_id, str) \
+                    and call_id in self.questions:
+                if self.questions[call_id] is None:
+                    del self.questions[call_id]
+                    self.activity = 'working'
+                else:
+                    result = decode_json(payload.get('output'))
+                    if isinstance(result, dict) and result.get('accepted') is False:
+                        del self.questions[call_id]
+            elif kind == 'message' and payload.get('role') == 'user':
+                self.answer_questions(payload.get('content', []))
+        self.state = 'waiting' if self.questions else self.activity
+
+    def answer_questions(self, content):
+        for part in content if isinstance(content, list) else []:
+            text = part.get('text') if isinstance(part, dict) else None
+            if not isinstance(text, str):
+                continue
+            start, end = '<send_user_message_question_reply>', '</send_user_message_question_reply>'
+            text = text.strip()
+            if not (text.startswith(start) and text.endswith(end)):
+                continue
+            replies = decode_json(text[len(start):-len(end)])
+            for reply in replies if isinstance(replies, list) else []:
+                if not isinstance(reply, dict) or 'answer' not in reply:
+                    continue
+                key = decode_json(reply.get('questionItemId'))
+                if not (isinstance(key, list) and len(key) == 3
+                        and key[0] == 'request_user_input_async'
+                        and isinstance(key[1], str) and type(key[2]) is int):
+                    continue
+                pending = self.questions.get(key[1])
+                if pending is not None:
+                    pending.discard(key[2])
+                    if not pending:
+                        del self.questions[key[1]]
 
 
 def match_title(name, window_title):
