@@ -1,5 +1,4 @@
 """One completion notification per observed turn, owned by the server."""
-from html import escape
 import queue
 import subprocess
 import threading
@@ -13,10 +12,11 @@ def command(session):
     if short != title:
         short = fit(title, 39) + '…'
     slot = session.get('slot')
-    destination = f'{slot}번 쌍' if slot else '위치 미확인'
-    body = f'<span size="xx-large"><b>{destination} 완료\n{escape(short)}</b></span>'
+    destination = str(slot % 10) if slot is not None else '?'
+    # Notification summaries are plain text; no body or font-size markup.
+    summary = f'{destination}: {short}'
     return ['notify-send', '-a', 'Codex', '-u', 'normal', '-t', '0',
-            '-h', 'string:bgcolor:#86EFAC', '-h', 'string:fgcolor:#052E16', 'Codex', body]
+            '-h', 'string:bgcolor:#86EFAC', '-h', 'string:fgcolor:#052E16', summary]
 
 
 class Completions:

@@ -52,7 +52,7 @@ class CompletionServerTests(unittest.TestCase):
                     time.sleep(0.02)
                 self.assertEqual(len(sent), 1)
                 self.assertEqual(sent[0][0], 's')
-                self.assertIn('3번 쌍 완료\n완료 알림 테스트', sent[0][1][-1])
+                self.assertEqual(sent[0][1][-1], '3: 완료 알림 테스트')
                 for _ in range(3):
                     a.request(); b.request()
                 self.assertEqual(len(sent), 1)

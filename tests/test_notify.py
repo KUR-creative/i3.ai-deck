@@ -25,14 +25,17 @@ class NotificationTests(unittest.TestCase):
         self.assertEqual(args[:7], ['notify-send', '-a', 'Codex', '-u', 'normal', '-t', '0'])
         self.assertIn('string:bgcolor:#86EFAC', args)
         self.assertIn('string:fgcolor:#052E16', args)
-        self.assertIn('3번 쌍 완료\ni3 알림 설정하기', args[-1])
+        self.assertEqual(args[-1], '3: i3 알림 설정하기')
+        self.assertEqual(len(args), 12)  # Summary only, no separate body.
+        self.assertEqual(command(self.session(slot=10))[-1], '0: i3 알림 설정하기')
 
-    def test_truncation_escapes_markup_and_normalizes_whitespace(self):
+    def test_plain_summary_truncates_and_normalizes_whitespace(self):
         body = command(self.session(name='<b> &\n' + '가' * 100))[-1]
-        self.assertIn('&lt;b&gt; &amp; ', body)
-        self.assertIn('…</b></span>', body)
+        self.assertTrue(body.startswith('3: <b> & '))
+        self.assertTrue(body.endswith('…'))
+        self.assertNotIn('\n', body)
         self.assertNotIn('가' * 21, body)
-        self.assertIn('위치 미확인', command(self.session(slot=None))[-1])
+        self.assertTrue(command(self.session(slot=None))[-1].startswith('?: '))
 
     def test_notification_uses_arguments_without_shell(self):
         args = command(self.session(name='$(touch unwanted)'))
