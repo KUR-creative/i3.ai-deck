@@ -15,7 +15,7 @@ i3.ai-deck 알림 액션 설정 안내
 
 필요한 도구
   - 실행 중인 dunst 알림 데몬
-  - --action 옵션을 지원하는 notify-send (Ubuntu 패키지: libnotify-bin)
+  - dunstify (dunst 패키지에 포함; 알림 전송과 클릭 수신)
   - 설정 적용에 사용할 dunstctl (dunst 패키지에 포함)
 
 설정 파일: ~/.config/dunst/dunstrc
@@ -31,7 +31,7 @@ i3.ai-deck 알림 액션 설정 안내
 
 역할 분담
   dunst: 왼쪽 클릭 -> 알림이 제공한 기본 액션 실행 -> 알림 닫기
-  ai-deck: notify-send에 --action=default=이동을 추가
+  ai-deck: dunstify에 --action=default,이동을 추가
            -> 액션 결과(default)와 원본 세션 ID를 연결
            -> 기존 model.py / i3.py로 현재 쌍 전환 + 대상 터미널 포커스
 

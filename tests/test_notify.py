@@ -22,7 +22,7 @@ class NotificationTests(unittest.TestCase):
 
     def test_pair_and_title_use_requested_style(self):
         args = command(self.session())
-        self.assertEqual(args[:7], ['notify-send', '-a', 'Codex', '-u', 'normal', '-t', '0'])
+        self.assertEqual(args[:7], ['dunstify', '-a', 'Codex', '-u', 'normal', '-t', '0'])
         self.assertIn('string:bgcolor:#86EFAC', args)
         self.assertIn('string:fgcolor:#052E16', args)
         self.assertEqual(args[-1], '3: i3 알림 설정하기')
@@ -45,7 +45,7 @@ class NotificationTests(unittest.TestCase):
         actions = Actions(Mock())
         with patch('deck.notify.subprocess.Popen', return_value=process) as run:
             actions.send('s', args).join(1)
-        self.assertIn('--action=default=이동', run.call_args.args[0])
+        self.assertIn('--action=default,이동', run.call_args.args[0])
         self.assertIn('string:x-dunst-stack-tag:i3-ai-deck:s', run.call_args.args[0])
         self.assertNotIn('shell', run.call_args.kwargs)
         self.assertEqual(list(actions.clicked()), ['s'])
@@ -77,10 +77,22 @@ class NotificationTests(unittest.TestCase):
         process.wait.assert_called_once_with(timeout=.5)
         self.assertIsNone(actions.send('s', command(self.session())))
 
+    def test_failed_sender_is_logged_without_navigation(self):
+        process = Mock(returncode=1)
+        process.communicate.return_value = ('', '액션 수신 실패\n')
+        process.poll.return_value = 1
+        actions = Actions(Mock())
+        with patch('deck.notify.subprocess.Popen', return_value=process), \
+                patch('deck.notify.sys.stderr') as log:
+            actions.send('s', command(self.session())).join(1)
+            self.assertIn('액션 수신 실패', ''.join(c.args[0] for c in log.write.call_args_list))
+        self.assertEqual(list(actions.clicked()), [])
+        actions.close()
+
     def test_real_child_action_and_shutdown(self):
         wake = threading.Event()
         actions = Actions(wake.set)
-        # Strip notify-send flags to exercise real pipes/processes using Python.
+        # Strip dunstify flags to exercise real pipes/processes using Python.
         args = [sys.executable, '-c', "print('default', flush=True)"]
         def launch(argv, **kwargs):
             return original([argv[0], *argv[4:]], **kwargs)

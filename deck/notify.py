@@ -1,6 +1,7 @@
 """One completion notification per observed turn, owned by the server."""
 import queue
 import subprocess
+import sys
 import threading
 
 from .text import fit
@@ -15,7 +16,7 @@ def command(session):
     destination = str(slot % 10) if slot is not None else '?'
     # Notification summaries are plain text; no body or font-size markup.
     summary = f'{destination}: {short}'
-    return ['notify-send', '-a', 'Codex', '-u', 'normal', '-t', '0',
+    return ['dunstify', '-a', 'Codex', '-u', 'normal', '-t', '0',
             '-h', 'string:bgcolor:#86EFAC', '-h', 'string:fgcolor:#052E16', summary]
 
 
@@ -37,7 +38,7 @@ class Completions:
 
 
 class Actions:
-    """At most one waiting notify-send per session; clicks retain the session ID."""
+    """At most one waiting dunstify per session; clicks retain the session ID."""
     def __init__(self, wake):
         self.wake = wake
         self.pending = {}
@@ -58,23 +59,26 @@ class Actions:
                 pass
 
     def send(self, sid, args):
-        action_args = [args[0], '--action=default=이동', '-h',
+        action_args = [args[0], '--action=default,이동', '-h',
                        f'string:x-dunst-stack-tag:i3-ai-deck:{sid}', *args[1:]]
         with self.lock:
             if self.closed:
                 return
             previous = self.pending.get(sid)
             process = subprocess.Popen(action_args, stdin=subprocess.DEVNULL,
-                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             self.pending[sid] = process
         if previous:
             self.stop(previous)
 
         def wait():
-            output, _ = process.communicate()
+            output, error = process.communicate()
             if process.returncode == 0 and output.strip() == 'default':
                 self.events.put((sid, process))
                 self.wake()
+            elif process.returncode > 0:
+                print(f'완료 알림 실패: {error.strip() or process.returncode}',
+                      file=sys.stderr, flush=True)
 
         worker = threading.Thread(target=wait, daemon=True)
         worker.start()
