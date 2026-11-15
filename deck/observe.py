@@ -110,13 +110,13 @@ class Rollout:
         if item.get('type') == 'event_msg':
             if kind == 'task_started':
                 self.activity = 'working'
-                self.questions = {key: value for key, value in self.questions.items()
-                                  if value is not None}
+                self.questions.clear()
             elif kind == 'task_complete':
                 self.activity = 'done'
                 self.completion = payload.get('turn_id') or item.get('timestamp')
-                self.questions = {key: value for key, value in self.questions.items()
-                                  if value is not None}
+                # Codex TUI closes even unanswered async prompts at live turn end.
+                # Clearing the UI's wait does not imply that the user answered.
+                self.questions.clear()
             elif kind in ('turn_aborted', 'task_aborted'):
                 self.activity = 'idle'
                 self.questions.clear()

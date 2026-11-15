@@ -208,8 +208,8 @@ workspace --no-auto-back-and-forth number "3:3";
   래퍼·Codex 훅 변경은 없다.
 - 제목은 `session_index.jsonl`, 상태는 rollout의 `task_started`, `task_complete`,
   `turn_aborted` 등에서 읽는다. 명시적인 `request_user_input`과 비동기
-  `request_user_input_async` 질문을 감지한다. 접수·작업 완료만으로 미응답 질문을 지우지
-  않고 질문별 답변 ID가 도착해야 해제한다. 일반 승인 대기·본문 속 일반 질문은 지원하지 않는다.
+  `request_user_input_async` 질문을 감지한다. 도구의 접수 응답으로는 대기를 해제하지
+  않는다. 질문별 답변 또는 턴 종료 시 해제한다. Codex TUI는 턴 종료 시 미응답 질문 UI도 닫는다. 일반 승인 대기·본문 속 일반 질문은 지원하지 않는다.
 - Ptyxis가 여러 창에 같은 PID를 사용하므로 프로젝트 이름이나 PID만으로 창을
   추측하지 않는다. 고유한 Codex 대화 제목과 창 제목의 일치로 연결하고,
   이후에는 같은 i3 창 ID를 추적한다. 중복 제목·숨겨진 내부 탭·커스텀 터미널
@@ -234,7 +234,8 @@ workspace --no-auto-back-and-forth number "3:3";
 
 - 쌍 사용자 지정 이름 편집은 사용자 결정으로 범위에서 제외했다.
 - 비동기 질문 `request_user_input_async`와 질문별 답변 ID를 연결해 wait를 표시한다.
-  질문 접수 응답은 실제 사용자 답변과 구분하며, 여러 질문 중 남은 질문이 있으면 wait를 유지한다.
+  질문 접수 응답은 실제 사용자 답변과 구분하며, 턴 진행 중 남은 질문이 있으면 wait를 유지한다.
+  턴 종료는 답변으로 간주하지 않지만 Codex가 질문 UI를 닫으므로 wait도 해제한다.
 - 일반 실행·파일 변경 승인 대기는 현재 rollout에서 확인되지 않았다. 감지 가능한
   근거 없이 wait로 추측하지 않는다. 기존 Codex 실행 방식과 설정은 유지한다.
 - 자세한 근거·상태 전이는 [질문 대기 보강 계획](docs/WAITING.md)에 기록한다.

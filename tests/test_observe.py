@@ -30,21 +30,37 @@ def event(kind, **fields):
 
 
 class ObserveTests(unittest.TestCase):
-    def test_async_receipt_and_partial_answers_preserve_wait_across_turns(self):
+    def test_async_receipt_and_partial_answers_preserve_wait_until_answered(self):
+        state = Rollout()
+        state.apply(event('task_started'))
+        state.apply(question())
+        state.apply(output('q', accepted=True))
+        self.assertEqual(state.state, 'waiting')
+        state.apply(answer('other', 0, 1))
+        state.apply(answer('q', 0))
+        self.assertEqual(state.state, 'waiting')
+        state.apply(answer('q', 1))
+        self.assertEqual(state.state, 'working')
+        self.assertEqual(state.questions, {})
+
+    def test_unanswered_question_ui_closes_at_turn_end_without_a_user_reply(self):
         state = Rollout()
         state.apply(event('task_started'))
         state.apply(question())
         state.apply(output('q', accepted=True))
         self.assertEqual(state.state, 'waiting')
         state.apply(event('task_complete', turn_id='turn-1'))
-        self.assertEqual((state.state, state.completion), ('waiting', 'turn-1'))
-        state.apply(answer('other', 0, 1))
-        state.apply(answer('q', 0))
+        self.assertEqual((state.state, state.completion, state.questions), ('done', 'turn-1', {}))
+        state.apply(answer('q', 0, 1))  # A late reply must not resurrect waiting/run.
+        self.assertEqual(state.state, 'done')
         state.apply(event('task_started'))
-        self.assertEqual(state.state, 'waiting')
-        state.apply(answer('q', 1))
         self.assertEqual(state.state, 'working')
-        self.assertEqual(state.questions, {})
+
+    def test_new_turn_discards_old_pending_question(self):
+        state = Rollout()
+        state.apply(question())
+        state.apply(event('task_started'))
+        self.assertEqual((state.state, state.questions), ('working', {}))
 
     def test_concurrent_questions_rejection_and_abort(self):
         state = Rollout()
@@ -66,7 +82,7 @@ class ObserveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'rollout.jsonl'
             items = [event('task_started'), question(), output('q', accepted=True),
-                     event('task_complete', turn_id='completed'), answer('q', 0), answer('q', 1)]
+                     answer('q', 0), answer('q', 1)]
             path.write_text(''.join(json.dumps(item) + '\n' for item in items[:-1]))
             state = Rollout()
             state.update(path)
@@ -76,8 +92,19 @@ class ObserveTests(unittest.TestCase):
             state.update(path)
             fresh = Rollout()
             fresh.update(path)
-            self.assertEqual((fresh.state, fresh.completion), ('done', 'completed'))
+            self.assertEqual(fresh.state, 'working')
             self.assertEqual((state.state, state.questions), (fresh.state, fresh.questions))
+
+    def test_restart_does_not_restore_question_from_a_completed_turn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'rollout.jsonl'
+            items = [event('task_started'), question(), output('q', accepted=True),
+                     event('task_complete', turn_id='finished'), event('task_started')]
+            path.write_text(''.join(json.dumps(item) + '\n' for item in items))
+            state = Rollout()
+            state.update(path)
+            self.assertEqual((state.state, state.completion, state.questions),
+                             ('working', 'finished', {}))
 
     def test_malformed_or_unrelated_replies_cannot_clear_questions(self):
         state = Rollout()
