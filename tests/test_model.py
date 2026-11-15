@@ -178,6 +178,9 @@ class ModelTests(unittest.TestCase):
                 dict(id='wait', state='waiting', located=True, alive=True)]
         self.assertEqual(next_attention(rows, 'done'), 'wait')
         self.assertEqual(next_attention(rows, 'wait'), 'done')
+        self.assertEqual(next_attention(rows, 'wait', reverse=True), 'done')
+        self.assertEqual(next_attention(rows, 'done', reverse=True), 'wait')
+        self.assertEqual(next_attention(rows, None, reverse=True), 'wait')
         self.assertIsNone(next_attention(rows[:1], 'empty'))
 
     def test_zero_pair_first_left_before_right_and_empty_side_navigation(self):

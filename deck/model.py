@@ -147,9 +147,9 @@ class Model:
             i3.focus(i3.pair_for(session['number'], self.pairs), session['con_id'])
         self.refresh()
 
-    def select_next(self, after=None):
+    def select_next(self, after=None, reverse=False):
         self.refresh()
-        target = next_attention(self.snapshot()['rows'], after)
+        target = next_attention(self.snapshot()['rows'], after, reverse)
         return dict(target=target, snapshot=self.snapshot())
 
 
@@ -158,12 +158,12 @@ def needs_attention(session):
         session['state'] == 'waiting' or session.get('unread')))
 
 
-def next_attention(rows, selected):
+def next_attention(rows, selected, reverse=False):
     if not rows:
         return None
-    start = next((i for i, row in enumerate(rows) if row['id'] == selected), -1)
+    start = next((i for i, row in enumerate(rows) if row['id'] == selected), 0 if reverse else -1)
     for step in range(1, len(rows) + 1):
-        row = rows[(start + step) % len(rows)]
+        row = rows[(start + (-step if reverse else step)) % len(rows)]
         if row.get('located') and needs_attention(row):
             return row['id']
     return None

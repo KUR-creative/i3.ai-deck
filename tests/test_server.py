@@ -18,7 +18,7 @@ class FakeModel:
             raise ValueError('missing agent')
         self.selected = sid
 
-    def select_next(self, after=None):
+    def select_next(self, after=None, reverse=False):
         target = 'agent' if self.selected is None else None
         return dict(target=target, snapshot=self.snapshot())
 

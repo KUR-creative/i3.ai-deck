@@ -96,7 +96,7 @@ def run(screen, client):
                 put(line, '>', highlight, x=7)
             previous_pair, previous_number = row['pair'], row.get('number')
         put(height - 2, message or error, curses.A_BOLD)
-        put(height - 1, 'j/k 선택 · g/G 처음/끝 · n 다음 확인 선택 · Enter 열기 · 클릭 열기 · q 닫기')
+        put(height - 1, 'j/k 선택 · g/G 처음/끝 · n/N 다음/이전 확인 · Enter 열기 · 클릭 열기 · q 닫기')
         screen.refresh()
         key = screen.getch()
         if key in (ord('q'), 27):
@@ -108,9 +108,12 @@ def run(screen, client):
             selected = rows[0 if key == ord('g') else -1]['id']
         elif key in (10, 13, curses.KEY_ENTER) and selected:
             navigate(selected)
-        elif key == ord('n'):
+        elif key in (ord('n'), ord('N')):
             try:
-                result = client.request('next', after=selected)
+                params = dict(after=selected)
+                if key == ord('N'):
+                    params['reverse'] = True
+                result = client.request('next', **params)
             except ValueError as problem:
                 message = str(problem)
                 continue
