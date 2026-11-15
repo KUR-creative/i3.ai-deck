@@ -47,7 +47,7 @@ class Model:
         names = self.titles.names
         for sid, process in live.items():
             session = self.sessions.setdefault(sid, dict(
-                id=sid, order=len(self.sessions), seen=None, con_id=None))
+                id=sid, order=len(self.sessions), seen=None, con_id=None, initialized=False))
             session.update(pid=process['pid'], alive=True, cwd=process['cwd'],
                            name=names.get(sid) or Path(process['cwd']).name or sid[:8])
             state = self.rollouts.setdefault(sid, Rollout())
@@ -55,6 +55,11 @@ class Model:
                 state.update(process['path'])
             except (OSError, ValueError):
                 state.state = 'unknown'
+            else:
+                if not session.get('initialized'):
+                    # Past completions establish a baseline, not new attention.
+                    session['seen'] = state.completion
+                    session['initialized'] = True
             session['state'] = state.state
             session['completion'] = state.completion
             # No project/cwd heuristics. Reject duplicate names and window matches.

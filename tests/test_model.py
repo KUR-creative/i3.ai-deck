@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from deck.i3 import focus_command, pair_for
 from deck.model import Model, next_agent
+from deck.notify import Completions
 
 
 class ModelTests(unittest.TestCase):
@@ -29,13 +30,63 @@ class ModelTests(unittest.TestCase):
         return dict(con_id=123, title='⠸ agent | project', number=number,
                     workspace=str(number), focused=focused)
 
+    def complete(self):
+        with self.log.open('a') as stream:
+            stream.write('{"type":"event_msg","payload":'
+                         '{"type":"task_complete","turn_id":"new-turn"}}\n')
+
+    def test_past_completion_is_not_attention_on_discovery_or_server_restart(self):
+        for model in (self.model, Model(Path(self.tmp.name), Path(self.tmp.name) / 'workspaces.conf')):
+            model.titles.names['s'] = 'agent'
+            model.reconcile(self.process(), [self.window()])
+            self.assertEqual(model.sessions['s']['state'], 'done')
+            self.assertEqual(model.sessions['s']['seen'], 't')
+            self.assertFalse(model.sessions['s']['unread'])
+            self.assertIsNone(next_agent(model.snapshot()['rows'], None))
+        # A reappearing process with the same unchanged log is not a new completion.
+        self.model.reconcile({}, [])
+        self.model.reconcile(self.process(), [self.window()])
+        self.assertFalse(self.model.sessions['s']['unread'])
+
+    def test_first_read_failure_does_not_turn_old_completion_into_new_attention(self):
+        model, tracker = self.model, Completions()
+        model.titles.names['s'] = 'agent'
+        with patch('deck.observe.Rollout.update', side_effect=OSError('temporarily unavailable')):
+            model.reconcile(self.process(), [self.window()])
+        self.assertFalse(model.sessions['s']['initialized'])
+        self.assertEqual(tracker.collect(model.sessions.values()), [])
+        model.reconcile(self.process(), [self.window()])
+        self.assertFalse(model.sessions['s']['unread'])
+        self.assertEqual(tracker.collect(model.sessions.values()), [])
+        self.complete()
+        model.reconcile(self.process(), [self.window()])
+        self.assertTrue(model.sessions['s']['unread'])
+        self.assertEqual(len(tracker.collect(model.sessions.values())), 1)
+        self.assertEqual(tracker.collect(model.sessions.values()), [])
+
+    def test_starting_during_work_still_detects_the_next_completion(self):
+        with self.log.open('a') as stream:
+            stream.write('{"type":"event_msg","payload":{"type":"task_started"}}\n')
+        model = self.model
+        model.titles.names['s'] = 'agent'
+        model.reconcile(self.process(), [self.window()])
+        self.assertEqual(model.sessions['s']['state'], 'working')
+        self.assertFalse(model.sessions['s']['unread'])
+        self.complete()
+        model.reconcile(self.process(), [self.window()])
+        self.assertTrue(model.sessions['s']['unread'])
+        model.remember_focus(123)
+        for _ in range(3):
+            model.reconcile(self.process(), [self.window()])
+            self.assertFalse(model.sessions['s']['unread'])
+
     def test_pairs_and_move_follow_current_location(self):
         model = self.model
         model.titles.names['s'] = 'agent'
         model.reconcile(self.process(), [self.window()])
         row = next(r for r in model.snapshot()['rows'] if r.get('target') == 's')
         self.assertEqual(row['pair'], '[3]')
-        self.assertTrue(row['unread'])
+        self.assertFalse(row['unread'])
         model.reconcile(self.process(), [self.window(18)])
         row = next(r for r in model.snapshot()['rows'] if r.get('target') == 's')
         self.assertEqual(row['pair'], '[8]')
@@ -58,6 +109,8 @@ class ModelTests(unittest.TestCase):
         agents = [r for r in rows if r['slot'] == 3 and r['kind'] == 'agent']
         self.assertEqual([r['name'] for r in agents], ['agent', 'second'])
         self.assertEqual([r['id'] for r in agents if r['focused']], ['other'])
+        self.complete()
+        model.reconcile(live, [self.window(), other])
         self.assertEqual(next_agent(model.snapshot()['agents'], 'other'), 's')
         model.reconcile(live, [self.window(), dict(other, focused=False)])
         agents = [r for r in model.snapshot()['rows'] if r['kind'] == 'agent']
@@ -70,6 +123,9 @@ class ModelTests(unittest.TestCase):
     def test_only_actual_focus_clears_completion_and_exit_hides_the_row(self):
         model = self.model
         model.titles.names['s'] = 'agent'
+        model.reconcile(self.process(), [self.window()])
+        self.assertFalse(model.sessions['s']['unread'])
+        self.complete()
         model.reconcile(self.process(), [self.window()])
         self.assertTrue(model.sessions['s']['unread'])
         model.reconcile(self.process(), [self.window(focused=True)])
@@ -87,6 +143,8 @@ class ModelTests(unittest.TestCase):
         live = self.process()
         live['other'] = dict(live['s'], pid=200)
         other = dict(self.window(), con_id=456, title='second | project')
+        model.reconcile(live, [self.window(), other])
+        self.complete()
         model.reconcile(live, [self.window(), other])
         model.remember_focus(456)
         model.remember_focus(999)  # TUI regains focus before the next snapshot.
@@ -107,6 +165,8 @@ class ModelTests(unittest.TestCase):
         live['other'] = dict(live['s'], pid=200)
         other = dict(self.window(focused=True), con_id=456, title='second | project')
         model.reconcile(live, [self.window(), other])
+        self.complete()
+        model.reconcile(live, [self.window(), other])
         model.remember_focus(456)
         with patch.object(model, 'refresh') as refresh, patch('deck.i3.focus') as focus:
             focus.side_effect = lambda pair, con_id: model.remember_focus(con_id)
@@ -122,6 +182,8 @@ class ModelTests(unittest.TestCase):
     def test_next_from_empty_workspace_respects_current_list_position(self):
         model = self.model
         model.titles.names['s'] = 'agent'
+        model.reconcile(self.process(), [self.window(3)])
+        self.complete()
         model.reconcile(self.process(), [self.window(3)])
         with patch.object(model, 'refresh'), patch('deck.i3.focus') as focus:
             self.assertEqual(model.select_next('workspace:12')['target'], 's')

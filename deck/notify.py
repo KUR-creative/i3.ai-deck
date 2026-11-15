@@ -27,7 +27,7 @@ class Completions:
     def collect(self, sessions):
         commands = []
         for session in sessions:
-            if not session.get('alive'):
+            if not session.get('alive') or not session.get('initialized', True):
                 continue
             sid, token = session['id'], session.get('completion')
             if sid in self.observed and token and token != self.observed[sid]:
