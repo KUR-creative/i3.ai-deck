@@ -8,6 +8,10 @@ i3.ai-deck 알림 액션 설정 안내
 이 스크립트는 안내만 출력합니다. 설치·설정 변경·알림 전송을 하지 않습니다.
 앱의 알림 액션 연결은 아직 미구현이며, 아래 설정만으로 이동되지는 않습니다.
 
+별도 적용 스크립트 (실제 설정 변경에는 사용자 허가가 필요):
+  python3 scripts/configure-dunst-action.py          # 차이만 미리보기
+  python3 scripts/configure-dunst-action.py --apply  # 백업·설정 수정·dunst 재로드
+
 필요한 도구
   - 실행 중인 dunst 알림 데몬
   - --action 옵션을 지원하는 notify-send (Ubuntu 패키지: libnotify-bin)
