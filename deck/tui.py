@@ -1,28 +1,13 @@
 """A compact curses list. Selection belongs to this client, state to the server."""
 import curses
 import time
-import unicodedata
 
 from .model import next_attention
+from .text import fit
 
 
 LABELS = dict(working='● 작업 중', waiting='? 질문', done='✓ 완료', idle='· 유휴',
               exited='× 종료', unknown='? 확인 불가', empty='· 빈 쌍', unmapped='? 연결 불명')
-
-
-def fit(text, width):
-    """Clip by terminal cells, including Korean names; discard control characters."""
-    result, used = [], 0
-    for char in str(text):
-        if not char.isprintable():
-            continue
-        size = 0 if unicodedata.combining(char) else (
-            2 if unicodedata.east_asian_width(char) in ('W', 'F') else 1)
-        if used + size > width:
-            break
-        result.append(char)
-        used += size
-    return ''.join(result)
 
 
 def run(screen, client):

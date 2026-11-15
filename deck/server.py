@@ -11,6 +11,7 @@ import threading
 import time
 
 from .model import Model
+from .notify import Completions, send
 
 
 LIMIT = 1024 * 1024
@@ -123,12 +124,20 @@ def serve(path):
         stopped = threading.Event()
         changed = threading.Event()
         watcher = None
+        completions = Completions()
 
         def observe():
             while not stopped.is_set():
                 try:
                     with server.model_lock:
                         model.refresh()
+                        commands = completions.collect(model.sessions.values())
+                    # Desktop I/O must not block clients holding the model lock.
+                    for command in commands:
+                        try:
+                            send(command)
+                        except (OSError, subprocess.SubprocessError) as error:
+                            print(f'완료 알림 실패: {error}', file=sys.stderr, flush=True)
                 except Exception as error:
                     with server.model_lock:
                         model.error = str(error)
