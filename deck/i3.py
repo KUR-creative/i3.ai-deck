@@ -56,7 +56,7 @@ def pair_for(number, pairs):
     return next((pair for pair in pairs if number in (pair['left'], pair['right'])), None)
 
 
-def focus_command(pair=None, con_id=None):
+def focus_command(pair=None, con_id=None, workspace_number=None):
     commands = []
     if pair:
         commands.extend('workspace --no-auto-back-and-forth number '
@@ -64,13 +64,17 @@ def focus_command(pair=None, con_id=None):
                         for key in ('left', 'right'))
     if con_id is not None:
         commands.append(f'[con_id={int(con_id)}] focus')
+    elif workspace_number is not None and pair:
+        side = next(key for key in ('left', 'right') if pair[key] == workspace_number)
+        commands.append('workspace --no-auto-back-and-forth number '
+                        + json.dumps(pair[side + '_name']))
     if not commands:
         raise ValueError('No destination')
     return '; '.join(commands)
 
 
-def focus(pair=None, con_id=None):
-    result = ipc('command', focus_command(pair, con_id))
+def focus(pair=None, con_id=None, workspace_number=None):
+    result = ipc('command', focus_command(pair, con_id, workspace_number))
     if not result or not all(reply.get('success') for reply in result):
         raise RuntimeError('i3 이동 실패: ' + json.dumps(result, ensure_ascii=False))
     if pair:

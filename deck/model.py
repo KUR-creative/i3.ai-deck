@@ -14,10 +14,9 @@ class Model:
         self.titles = Titles(home)
         self.sessions = {}
         self.rollouts = {}
-        self.focused = {}
-        self.focus_sequence = 0
         self.last_focus = None
         self.current_slot = None
+        self.current_number = None
         self.visible_slots = []
         self.error = ''
 
@@ -31,6 +30,7 @@ class Model:
                                          if ws['visible']
                                          and (pair := i3.pair_for(ws['num'], self.pairs))})
             current = next((ws for ws in workspaces if ws['focused']), None)
+            self.current_number = current['num'] if current else None
             pair = i3.pair_for(current['num'], self.pairs) if current else None
             self.current_slot = pair['slot'] if pair else None
             self.error = ''
@@ -74,11 +74,13 @@ class Model:
             window = by_id.get(session['con_id'])
             session['candidate_slots'] = sorted({pair['slot'] for w in matching
                                                 if (pair := i3.pair_for(w['number'], self.pairs))})
+            session['candidate_numbers'] = sorted({w['number'] for w in matching})
             session.update(workspace=window['workspace'] if window else '',
                            number=window['number'] if window else -1)
             pair = i3.pair_for(session['number'], self.pairs)
             session['slot'] = pair['slot'] if pair else None
             session['located'] = window is not None
+            session['focused'] = bool(window and window['focused'])
             if window and window['focused']:
                 session['seen'] = state.completion
             session['unread'] = (state.state == 'done' and state.completion is not None
@@ -89,9 +91,7 @@ class Model:
                 self.rollouts.pop(sid, None)
 
     def remember_focus(self, con_id):
-        """Retain brief focus visits even if the next snapshot is already on the TUI."""
-        self.focus_sequence += 1
-        self.focused[con_id] = self.focus_sequence
+        """Acknowledge brief visits even if the next snapshot is already on the TUI."""
         self.last_focus = con_id
         for session in self.sessions.values():
             if session.get('alive') and session['con_id'] == con_id and session['state'] == 'done':
@@ -102,46 +102,48 @@ class Model:
         rows = []
         active = [s for s in self.sessions.values() if s.get('alive')]
         agents = []
-        for pair in self.pairs:
-            members = sorted((s for s in active if s['slot'] == pair['slot']),
-                             key=lambda s: s['order'])
-            if members:
-                agents.extend(dict(s, pair=pair['label']) for s in members)
-                representative = max(members, key=lambda s: self.focused.get(s['con_id'], 0))
-                rows.append(dict(representative, id=f'pair:{pair["slot"]}', kind='pair',
-                                 target=representative['id'], pair=pair['label'],
-                                 member_ids=[s['id'] for s in members], count=len(members),
-                                 attention_count=sum(needs_attention(s) for s in members),
-                                 unread=any(s['unread'] for s in members)))
-            else:
-                possible = [s for s in active if not s['located']
-                            and pair['slot'] in s.get('candidate_slots', [])]
-                rows.append(dict(id=f'pair:{pair["slot"]}', kind='empty',
-                                 slot=pair['slot'], pair=pair['label'],
-                                 name=possible[0]['name'] if possible else '에이전트 없음',
-                                 state='unmapped' if possible else 'empty',
-                                 unread=False, located=True, target=None))
-        unplaced = [dict(s, pair='?', kind='agent', target=s['id'])
+        for pair in sorted(self.pairs, key=lambda p: p['slot'] % 10):
+            label = f'[{pair["slot"] % 10}]'
+            for side in ('left', 'right'):
+                number = pair[side]
+                workspace_label = ('F' if side == 'left' else '') + str(pair['slot'] % 10)
+                members = sorted((s for s in active if s['number'] == number),
+                                 key=lambda s: s['order'])
+                if members:
+                    entries = [dict(s, pair=label, workspace_label=workspace_label,
+                                    kind='agent', target=s['id']) for s in members]
+                    rows.extend(entries)
+                    agents.extend(entries)
+                else:
+                    possible = any(not s['located'] and number in s.get('candidate_numbers', [])
+                                   for s in active)
+                    rows.append(dict(id=f'workspace:{number}', kind='empty', number=number,
+                                     slot=pair['slot'], pair=label, workspace_label=workspace_label,
+                                     name='연결 확인 필요' if possible else '비어 있음',
+                                     state='unmapped' if possible else 'empty',
+                                     unread=False, focused=False, located=True, target=None))
+        unplaced = [dict(s, pair='[?]', workspace_label='?', kind='agent', target=s['id'])
                     for s in active if s['slot'] is None]
         rows.extend(unplaced)
         agents.extend(unplaced)
-        rows.extend(dict(s, pair='종료', kind='agent') for s in self.sessions.values()
+        rows.extend(dict(s, pair='[×]', workspace_label='-', kind='agent', focused=False)
+                    for s in self.sessions.values()
                     if not s.get('alive'))
         return dict(rows=rows, agents=agents, error=self.error,
-                    current_slot=self.current_slot, visible_slots=self.visible_slots)
+                    current_slot=self.current_slot, current_number=self.current_number,
+                    visible_slots=self.visible_slots)
 
     def navigate(self, sid):
         # Read the latest location before constructing a command, even if re-sorted.
         self.refresh()
 
-        if sid.startswith('pair:'):
-            slot = int(sid.split(':')[1])
-            pair = next(pair for pair in self.pairs if pair['slot'] == slot)
-            row = next(row for row in self.snapshot()['rows'] if row['id'] == sid)
-            sid = row['target']
-            if sid is None:
-                i3.focus(pair)
-        if sid is not None:
+        if sid.startswith('workspace:'):
+            number = int(sid.split(':')[1])
+            pair = i3.pair_for(number, self.pairs)
+            if pair is None:
+                raise ValueError('알 수 없는 워크스페이스입니다.')
+            i3.focus(pair, workspace_number=number)
+        else:
             session = self.sessions.get(sid)
             if not session or not session['alive'] or not session['located']:
                 raise ValueError('이 세션의 i3 창을 확인할 수 없습니다.')

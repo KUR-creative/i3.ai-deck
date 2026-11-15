@@ -34,11 +34,11 @@ class ModelTests(unittest.TestCase):
         model.titles.names['s'] = 'agent'
         model.reconcile(self.process(), [self.window()])
         row = next(r for r in model.snapshot()['rows'] if r.get('target') == 's')
-        self.assertEqual(row['pair'], 'F3/3')
+        self.assertEqual(row['pair'], '[3]')
         self.assertTrue(row['unread'])
         model.reconcile(self.process(), [self.window(18)])
         row = next(r for r in model.snapshot()['rows'] if r.get('target') == 's')
-        self.assertEqual(row['pair'], 'F8/8')
+        self.assertEqual(row['pair'], '[8]')
         self.assertEqual(focus_command(pair_for(18, model.pairs), 123),
                          'workspace --no-auto-back-and-forth number "18:label"; '
                          'workspace --no-auto-back-and-forth number "8:label"; [con_id=123] focus')
@@ -46,7 +46,7 @@ class ModelTests(unittest.TestCase):
             model.navigate('s')
             focus.assert_called_once_with(model.pairs[7], 123)
 
-    def test_one_row_per_pair_tracks_focused_agent_and_hidden_attention(self):
+    def test_each_agent_has_a_stable_row_and_empty_workspaces_remain(self):
         model = self.model
         model.titles.names.update(s='agent', other='second')
         live = self.process()
@@ -54,16 +54,17 @@ class ModelTests(unittest.TestCase):
         other = dict(self.window(focused=True), con_id=456, title='second | project')
         model.reconcile(live, [self.window(), other])
         rows = model.snapshot()['rows']
-        self.assertEqual(len(rows), 10)
-        row = next(r for r in rows if r['id'] == 'pair:3')
-        self.assertEqual((row['name'], row['count']), ('second', 2))
-        self.assertEqual(row['attention_count'], 1)
+        self.assertEqual(len(rows), 21)
+        agents = [r for r in rows if r['slot'] == 3 and r['kind'] == 'agent']
+        self.assertEqual([r['name'] for r in agents], ['agent', 'second'])
+        self.assertEqual([r['id'] for r in agents if r['focused']], ['other'])
         self.assertEqual(next_attention(model.snapshot()['agents'], 'other'), 's')
         model.reconcile(live, [self.window(), dict(other, focused=False)])
-        row = next(r for r in model.snapshot()['rows'] if r['id'] == 'pair:3')
-        self.assertEqual(row['name'], 'second')  # Retain when the TUI gains focus.
+        agents = [r for r in model.snapshot()['rows'] if r['kind'] == 'agent']
+        self.assertEqual([r['name'] for r in agents], ['agent', 'second'])
+        self.assertFalse(any(r['focused'] for r in agents))
         with patch.object(model, 'refresh'), patch('deck.i3.focus') as focus:
-            model.navigate('pair:3')
+            model.navigate('other')
             focus.assert_called_once_with(model.pairs[2], 456)
 
     def test_only_actual_focus_clears_completion_and_exit_goes_last(self):
@@ -75,10 +76,10 @@ class ModelTests(unittest.TestCase):
         self.assertFalse(model.sessions['s']['unread'])
         model.reconcile({}, [])
         rows = model.snapshot()['rows']
-        self.assertEqual(len([r for r in rows if r['kind'] == 'empty']), 10)
+        self.assertEqual(len([r for r in rows if r['kind'] == 'empty']), 20)
         self.assertEqual(rows[-1]['state'], 'exited')
 
-    def test_brief_focus_visit_updates_title_after_return_to_tui(self):
+    def test_brief_focus_acknowledges_without_reordering_or_replacing_titles(self):
         model = self.model
         model.titles.names.update(s='agent', other='second')
         live = self.process()
@@ -88,13 +89,14 @@ class ModelTests(unittest.TestCase):
         model.remember_focus(456)
         model.remember_focus(999)  # TUI regains focus before the next snapshot.
         model.reconcile(live, [self.window(), other])
-        row = next(r for r in model.snapshot()['rows'] if r['id'] == 'pair:3')
-        self.assertEqual(row['name'], 'second')
+        rows = [r for r in model.snapshot()['rows'] if r['kind'] == 'agent']
+        self.assertEqual([r['name'] for r in rows], ['agent', 'second'])
         self.assertFalse(model.sessions['other']['unread'])
-        # Moving that window preserves its focus history in the destination pair.
+        # Moving a window preserves the session identity in the destination pair.
         model.reconcile(live, [self.window(4), dict(other, number=4)])
-        row = next(r for r in model.snapshot()['rows'] if r['id'] == 'pair:4')
+        row = next(r for r in model.snapshot()['rows'] if r['id'] == 'other')
         self.assertEqual(row['name'], 'second')
+        self.assertEqual(row['pair'], '[4]')
 
     def test_next_visits_hidden_agent_then_stops_after_acknowledgement(self):
         model = self.model
@@ -119,7 +121,7 @@ class ModelTests(unittest.TestCase):
         live['other'] = live['s']
         model.reconcile(live, [self.window()])
         self.assertFalse(model.sessions['s']['located'])
-        row = next(r for r in model.snapshot()['rows'] if r['id'] == 'pair:3')
+        row = next(r for r in model.snapshot()['rows'] if r['id'] == 'workspace:3')
         self.assertEqual(row['state'], 'unmapped')
 
     def test_working_title_distinguishes_a_dormant_duplicate(self):
@@ -142,7 +144,7 @@ class ModelTests(unittest.TestCase):
         model.reconcile(self.process(), [a, b])
         self.assertFalse(model.sessions['s']['located'])
         for row in model.snapshot()['rows']:
-            if row['slot'] in (2, 3):
+            if row.get('number') in (2, 3):
                 self.assertEqual(row['state'], 'unmapped')
 
     def test_current_pair_comes_from_actual_focused_workspace(self):
@@ -153,6 +155,7 @@ class ModelTests(unittest.TestCase):
             ipc.side_effect = [dict(nodes=[]), visible]
             model.refresh()
         self.assertEqual(model.snapshot()['current_slot'], 3)
+        self.assertEqual(model.snapshot()['current_number'], 3)
         self.assertEqual(model.snapshot()['visible_slots'], [3])
 
     def test_next_attention_skips_empty_working_exited_and_wraps(self):
@@ -163,6 +166,15 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(next_attention(rows, 'done'), 'wait')
         self.assertEqual(next_attention(rows, 'wait'), 'done')
         self.assertIsNone(next_attention(rows[:1], 'empty'))
+
+    def test_zero_pair_first_left_before_right_and_empty_side_navigation(self):
+        model = self.model
+        rows = model.snapshot()['rows']
+        self.assertEqual([(r['pair'], r['workspace_label']) for r in rows[:4]],
+                         [('[0]', 'F0'), ('[0]', '0'), ('[1]', 'F1'), ('[1]', '1')])
+        with patch.object(model, 'refresh'), patch('deck.i3.focus') as focus:
+            model.navigate('workspace:20')
+            focus.assert_called_once_with(model.pairs[9], workspace_number=20)
 
 
 if __name__ == '__main__':

@@ -32,6 +32,12 @@ class PairNavigationTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, '쌍 전환 확인 실패'):
                 focus(self.pairs[1])
 
+    def test_empty_left_workspace_finishes_on_the_selected_side(self):
+        command = focus_command(self.pairs[9], workspace_number=20)
+        self.assertEqual(command, 'workspace --no-auto-back-and-forth number "20:F10"; '
+                         'workspace --no-auto-back-and-forth number "10:0"; '
+                         'workspace --no-auto-back-and-forth number "20:F10"')
+
 
 if __name__ == '__main__':
     unittest.main()
