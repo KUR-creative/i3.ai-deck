@@ -75,7 +75,7 @@ class DiscoveryTests(unittest.TestCase):
         sent = notifications.collect(model.sessions.values())
         self.assertEqual(len(sent), 3)
         for name in names.values():
-            self.assertTrue(any(name in args[-1] for args in sent))
+            self.assertTrue(any(name in args[-1] for _, args in sent))
         self.assertEqual(notifications.collect(model.sessions.values()), [])
 
 

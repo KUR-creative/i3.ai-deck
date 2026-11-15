@@ -23,13 +23,20 @@ class CompletionServerTests(unittest.TestCase):
             def snapshot(self):
                 return dict(rows=list(self.sessions.values()), error='')
 
+            def navigate(self, sid):
+                self.moved = sid
+
         model, sent = Model(), []
         watcher = Mock(stdout=iter([]))
         watcher.poll.return_value = 0
+        alerts = Mock()
+        clicks = []
+        alerts.clicked.side_effect = lambda: [clicks.pop(0)] if clicks else []
+        alerts.send.side_effect = lambda sid, args: sent.append((sid, args))
         with tempfile.TemporaryDirectory() as tmp, \
                 patch('deck.server.Model', return_value=model), \
                 patch('deck.server.subprocess.Popen', return_value=watcher), \
-                patch('deck.server.send', side_effect=sent.append):
+                patch('deck.server.Actions', return_value=alerts):
             path = Path(tmp) / 'deck.sock'
             thread = threading.Thread(target=serve, args=(path,), daemon=True)
             thread.start()
@@ -44,13 +51,21 @@ class CompletionServerTests(unittest.TestCase):
                     a.request(); b.request()
                     time.sleep(0.02)
                 self.assertEqual(len(sent), 1)
-                self.assertIn('3번 쌍 완료\n완료 알림 테스트', sent[0][-1])
+                self.assertEqual(sent[0][0], 's')
+                self.assertIn('3번 쌍 완료\n완료 알림 테스트', sent[0][1][-1])
                 for _ in range(3):
                     a.request(); b.request()
                 self.assertEqual(len(sent), 1)
+                model.sessions['s']['slot'] = 8  # Agent moved after its notification.
+                clicks.append('s')
+                deadline = time.monotonic() + 3
+                while not hasattr(model, 'moved') and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertEqual(model.moved, 's')
                 a.request('stop')
                 thread.join(3)
                 self.assertFalse(thread.is_alive())
+                alerts.close.assert_called_once_with()
             finally:
                 if thread.is_alive():
                     a.request('stop')

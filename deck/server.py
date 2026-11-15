@@ -8,7 +8,7 @@ import sys
 import threading
 
 from .model import Model
-from .notify import Completions, send
+from .notify import Actions, Completions
 from .protocol import LIMIT
 
 
@@ -72,17 +72,26 @@ def serve(path):
         changed = threading.Event()
         watcher = None
         completions = Completions()
+        alerts = Actions(changed.set)
 
         def observe():
             while not stopped.is_set():
                 try:
+                    for sid in alerts.clicked():
+                        try:
+                            with server.model_lock:
+                                model.navigate(sid)
+                        except (OSError, RuntimeError, ValueError) as error:
+                            print(f'알림 이동 실패: {error}', file=sys.stderr, flush=True)
                     with server.model_lock:
                         model.refresh()
                         commands = completions.collect(model.sessions.values())
+                        alive = {sid for sid, s in model.sessions.items() if s.get('alive')}
                     # Desktop I/O must not block clients holding the model lock.
-                    for command in commands:
+                    alerts.prune(alive)
+                    for sid, command in commands:
                         try:
-                            send(command)
+                            alerts.send(sid, command)
                         except (OSError, subprocess.SubprocessError) as error:
                             print(f'완료 알림 실패: {error}', file=sys.stderr, flush=True)
                 except Exception as error:
@@ -118,6 +127,7 @@ def serve(path):
         finally:
             stopped.set()
             changed.set()
+            alerts.close()
             if watcher and watcher.poll() is None:
                 watcher.terminate()
                 watcher.wait(timeout=3)
