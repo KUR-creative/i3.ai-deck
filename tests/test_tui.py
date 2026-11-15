@@ -126,7 +126,7 @@ class MouseTests(unittest.TestCase):
             run(screen, client)
         return client.calls
 
-    def test_N_immediately_navigates_all_agents_and_wraps(self):
+    def test_N_selects_all_agents_and_wraps_without_navigation(self):
         class AllClient(Client):
             def request(self, action='snapshot', **params):
                 snapshot = super().request('snapshot')
@@ -136,7 +136,9 @@ class MouseTests(unittest.TestCase):
                 return super().request(action, **params)
 
         self.assertEqual(self.run_keys([ord('N'), ord('N'), ord('q')], AllClient()),
-                         [('a', True), 'b', ('b', True), 'a'])
+                         [('a', True), ('b', True)])
+        self.assertEqual(self.run_keys([ord('N'), 10, ord('q')], AllClient()),
+                         [('a', True), 'b'])
 
     def test_waiting_screen_keeps_navigation_keys_but_blocks_server_actions(self):
         class OfflineClient(Client):
