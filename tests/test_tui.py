@@ -38,6 +38,24 @@ class Client:
 
 
 class MouseTests(unittest.TestCase):
+    def test_completion_circles_distinguish_unread_and_read(self):
+        for unread, symbol in [(True, '●'), (False, '○')]:
+            with self.subTest(unread=unread):
+                class DoneClient(Client):
+                    def request(self, action='snapshot', **params):
+                        snapshot = super().request(action, **params)
+                        snapshot['rows'][1]['unread'] = unread
+                        return snapshot
+
+                screen = Screen([ord('q')])
+                with ExitStack() as stack:
+                    for name in ('curs_set', 'set_escdelay', 'mouseinterval', 'mousemask'):
+                        stack.enter_context(patch('deck.tui.curses.' + name))
+                    stack.enter_context(patch('deck.tui.curses.has_colors', return_value=False))
+                    run(screen, DoneClient())
+                self.assertIn((1, 9, f' {symbol} 완료', 0), screen.drawn)
+                self.assertFalse(any('!' in text for _, _, text, _ in screen.drawn))
+
     def run_keys(self, keys, client=None):
         client = client or Client()
         with ExitStack() as stack:
