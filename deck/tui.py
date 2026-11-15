@@ -27,9 +27,13 @@ def run(screen, client):
     rows, error, last_poll = [], '', 0
     current_slot = None
     current_number = None
+    connected = True
 
     def navigate(sid):
         nonlocal message, last_poll
+        if not connected:
+            message = '서버 연결 대기 중입니다.'
+            return
         try:
             client.request('focus', id=sid)
             message = ''
@@ -40,6 +44,10 @@ def run(screen, client):
     while True:
         if time.monotonic() - last_poll >= 0.3:
             snapshot = client.request()
+            was_connected = connected
+            connected = snapshot.get('connected', True)
+            if connected and not was_connected:
+                message = ''
             rows, error = snapshot['rows'], snapshot['error']
             current_slot = snapshot.get('current_slot')
             current_number = snapshot.get('current_number')
@@ -71,7 +79,7 @@ def run(screen, client):
             color = {'working': 1, 'waiting': 2, 'done': 3}.get(row['state'], 4)
             status_attr = curses.color_pair(color) if curses.has_colors() else 0
             attr = 0
-            if empty:
+            if empty or not connected:
                 attr = curses.A_DIM
             if row['id'] == selected:
                 attr |= curses.A_REVERSE
@@ -84,18 +92,18 @@ def run(screen, client):
             put(line, f'{pair:3} {workspace:>2}', attr)
             put(line, f'{badge}{LABELS[row["state"]]}', attr, x=9)
             put(line, row['name'] + location, attr, x=23)
-            if not empty:
+            if not empty and connected:
                 put(line, f'{badge}{LABELS[row["state"]]}',
                     status_attr | (curses.A_REVERSE if row['id'] == selected else 0), x=9)
             in_workspace = row['kind'] == 'empty' or (row.get('alive') and row.get('located'))
-            if in_workspace and pair and row.get('slot') == current_slot:
+            if connected and in_workspace and pair and row.get('slot') == current_slot:
                 put(line, pair, highlight)
-            if in_workspace and workspace and row.get('number') == current_number:
+            if connected and in_workspace and workspace and row.get('number') == current_number:
                 put(line, f'{workspace:>2}', highlight, x=4)
-            if row.get('focused'):
+            if connected and row.get('focused'):
                 put(line, '>', highlight, x=7)
             previous_pair, previous_number = row['pair'], row.get('number')
-        put(height - 2, message or error, curses.A_BOLD)
+        put(height - 2, (message or error) if connected else error, curses.A_BOLD)
         put(height - 1, 'j/k 선택 · g/G 처음/끝 · n/N 다음/이전 확인 · Enter 열기 · 클릭 열기 · q 닫기')
         screen.refresh()
         key = screen.getch()
@@ -109,6 +117,9 @@ def run(screen, client):
         elif key in (10, 13, curses.KEY_ENTER) and selected:
             navigate(selected)
         elif key in (ord('n'), ord('N')):
+            if not connected:
+                message = '서버 연결 대기 중입니다.'
+                continue
             try:
                 params = dict(after=selected)
                 if key == ord('N'):

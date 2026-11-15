@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 
 from deck.server import connect, default_socket, serve
+from deck.connection import ReconnectingClient
 from deck.tui import run
 
 
@@ -22,7 +23,14 @@ def main():
     if args.server:
         serve(args.socket)
         return
-    client = connect(args.socket, start=not args.stop_server)
+    if args.list or args.stop_server:
+        client = connect(args.socket, start=not args.stop_server)
+    else:
+        try:
+            initial = connect(args.socket)
+        except (OSError, RuntimeError):
+            initial = None
+        client = ReconnectingClient(args.socket, initial)
     try:
         if args.stop_server:
             client.request('stop')

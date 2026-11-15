@@ -94,6 +94,18 @@ class MouseTests(unittest.TestCase):
         self.assertEqual(self.run_keys([ord('N'), 10, ord('q')], PreviousClient()),
                          [('a', True), 'b'])
 
+    def test_waiting_screen_keeps_navigation_keys_but_blocks_server_actions(self):
+        class OfflineClient(Client):
+            def request(self, action='snapshot', **params):
+                if action != 'snapshot':
+                    raise AssertionError('Offline actions must not be sent')
+                result = super().request()
+                result.update(connected=False, error='서버 연결 대기 중')
+                return result
+
+        self.assertEqual(self.run_keys([ord('j'), ord('G'), ord('g'), 10,
+                                        ord('n'), ord('N'), ord('q')], OfflineClient()), [])
+
     def test_first_click_release_without_press(self):
         self.assertEqual(self.exercise([curses.BUTTON1_RELEASED]), ['b'])
 
