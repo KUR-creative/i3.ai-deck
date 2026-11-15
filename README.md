@@ -57,6 +57,18 @@ python3 ai_deck.py --start-server
 기본 소켓·로그는 `$XDG_RUNTIME_DIR/i3-ai-deck/`에 두며, 환경 변수가 없으면
 `~/.cache/i3-ai-deck/`를 쓴다. `--socket PATH`로 테스트 서버를 분리할 수 있다.
 
+중복 시작 확인:
+
+```bash
+python3 ai_deck.py --start-server
+pgrep -af '[a]i_deck.py --server'
+python3 ai_deck.py --start-server
+pgrep -af '[a]i_deck.py --server'
+```
+
+기본 서버만 사용 중이면 출력은 한 줄이고, 두 번째 실행 뒤에도 PID가 같으면 된다.
+별도 `--socket`으로 띄운 테스트 서버가 있다면 출력의 소켓 경로별로 구분한다.
+
 ## 완료 알림
 
 서버가 새 완료를 감지하면 다음처럼 쌍 번호와 대화 제목을 알린다.
