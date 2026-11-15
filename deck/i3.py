@@ -57,26 +57,31 @@ def pair_for(number, pairs):
 
 
 def focus_command(pair=None, con_id=None, workspace_number=None):
-    commands = []
-    if pair:
-        commands.extend('workspace --no-auto-back-and-forth number '
-                        + json.dumps(pair[key + '_name'])
-                        for key in ('left', 'right'))
     if con_id is not None:
-        commands.append(f'[con_id={int(con_id)}] focus')
-    elif workspace_number is not None and pair:
-        side = next(key for key in ('left', 'right') if pair[key] == workspace_number)
-        commands.append('workspace --no-auto-back-and-forth number '
-                        + json.dumps(pair[side + '_name']))
-    if not commands:
+        return f'[con_id={int(con_id)}] focus'
+    if workspace_number is not None and pair:
+        side = next((key for key in ('left', 'right') if pair[key] == workspace_number), None)
+        if side is None:
+            raise ValueError('선택한 워크스페이스가 해당 쌍에 없습니다.')
+        return 'workspace --no-auto-back-and-forth number ' + json.dumps(pair[side + '_name'])
+    if pair is None:
         raise ValueError('No destination')
-    return '; '.join(commands)
+    return None  # ws alone restores the pair's remembered focus.
 
 
 def focus(pair=None, con_id=None, workspace_number=None):
-    result = ipc('command', focus_command(pair, con_id, workspace_number))
-    if not result or not all(reply.get('success') for reply in result):
-        raise RuntimeError('i3 이동 실패: ' + json.dumps(result, ensure_ascii=False))
+    command = focus_command(pair, con_id, workspace_number)
+    if pair:
+        try:
+            subprocess.run([str(Path.home() / '.local/bin/ws'), str(pair['slot'] % 10)],
+                           check=True, capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError) as error:
+            detail = getattr(error, 'stderr', None) or str(error)
+            raise RuntimeError(f'ws 이동 실패: {detail.strip()}') from error
+    if command:
+        result = ipc('command', command)
+        if not result or not all(reply.get('success') for reply in result):
+            raise RuntimeError('i3 이동 실패: ' + json.dumps(result, ensure_ascii=False))
     if pair:
         visible = {ws['num'] for ws in ipc('get_workspaces') if ws['visible']}
         expected = {pair['left'], pair['right']}
