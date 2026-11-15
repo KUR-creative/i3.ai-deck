@@ -157,8 +157,10 @@ workspace --no-auto-back-and-forth number "3:3";
 ## 첫 버전의 구현과 제한
 
 - `/proc`에서 현재 사용자의 Codex가 열고 있는 rollout 파일을 찾는다.
-  `source=cli` 세션만 표시하고 내부 guardian 등은 제외한다. 앱 서버 전용 모드나
-  파일을 열지 않은 세션은 수집되지 않는다. 래퍼·Codex 훅 변경은 없다.
+  명시적인 사용자 스레드를 수집하고 내부 guardian 등은 제외한다. 재개한 세션의
+  출처가 `vscode`여도 수집하며 한 백엔드의 여러 사용자 세션을 모두 수집한다.
+  구형 로그는 cli/vscode 출처를 지원한다. 파일을 열지 않은 세션은 수집되지 않는다.
+  래퍼·Codex 훅 변경은 없다.
 - 제목은 `session_index.jsonl`, 상태는 rollout의 `task_started`, `task_complete`,
   `turn_aborted` 등에서 읽는다. 명시적인 `request_user_input` 도구 요청도 감지한다.
   일반 승인 대기·모든 형태의 질문을 감지하는 것은 아직 지원하지 않는다.
