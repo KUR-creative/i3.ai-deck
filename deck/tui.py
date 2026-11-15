@@ -97,6 +97,9 @@ def run(screen, client):
             if not empty and connected:
                 put(line, f' {label}',
                     status_attr | (curses.A_REVERSE if row['id'] == selected else 0), x=9)
+            if label[0] in ('●', '○'):
+                # Keep the circle's original colors; only the text follows selection.
+                put(line, label[0], status_attr if connected else curses.A_DIM, x=10)
             in_workspace = row['kind'] == 'empty' or (row.get('alive') and row.get('located'))
             if connected and in_workspace and pair and row.get('slot') == current_slot:
                 put(line, pair, highlight)

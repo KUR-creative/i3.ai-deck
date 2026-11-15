@@ -38,6 +38,32 @@ class Client:
 
 
 class MouseTests(unittest.TestCase):
+    def test_selected_circle_keeps_colors_but_status_text_is_reversed(self):
+        for state, unread, symbol in [('working', False, '●'), ('done', True, '●'),
+                                       ('done', False, '○')]:
+            with self.subTest(state=state, unread=unread):
+                class IconClient(Client):
+                    def request(self, action='snapshot', **params):
+                        snapshot = super().request(action, **params)
+                        snapshot['rows'][0].update(state=state, unread=unread)
+                        return snapshot
+
+                screen = Screen([ord('q')])
+                with ExitStack() as stack:
+                    for name in ('curs_set', 'set_escdelay', 'mouseinterval', 'mousemask',
+                                 'start_color', 'use_default_colors', 'init_pair'):
+                        stack.enter_context(patch('deck.tui.curses.' + name))
+                    stack.enter_context(patch('deck.tui.curses.has_colors', return_value=True))
+                    stack.enter_context(patch('deck.tui.curses.color_pair', side_effect=lambda n: n << 8))
+                    run(screen, IconClient())
+                color = (1 if state == 'working' else 3) << 8
+                self.assertIn((0, 10, symbol, color), screen.drawn)
+                self.assertFalse(any(attr & curses.A_REVERSE for y, x, _, attr in screen.drawn
+                                     if y == 0 and x == 10))
+                self.assertTrue(any(attr == color | curses.A_REVERSE for y, x, _, attr in screen.drawn
+                                    if y == 0 and x == 9))
+                self.assertIn((0, 23, 'agent A', curses.A_REVERSE), screen.drawn)
+
     def test_completion_circles_distinguish_unread_and_read(self):
         for unread, symbol in [(True, '●'), (False, '○')]:
             with self.subTest(unread=unread):
