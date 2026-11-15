@@ -26,6 +26,7 @@ def run(screen, client):
     selected, top, message = None, 0, ''
     rows, error, last_poll = [], '', 0
     current_slot = None
+    current_number = None
     attention_cursor = None
 
     def navigate(sid):
@@ -42,11 +43,12 @@ def run(screen, client):
             snapshot = client.request()
             rows, error = snapshot['rows'], snapshot['error']
             current_slot = snapshot.get('current_slot')
+            current_number = snapshot.get('current_number')
             if selected not in {row['id'] for row in rows}:
                 selected = rows[0]['id'] if rows else None
             last_poll = time.monotonic()
         height, width = screen.getmaxyx()
-        visible = max(1, height - 3)
+        visible = max(1, height - 2)
         index = next((i for i, row in enumerate(rows) if row['id'] == selected), 0)
         top = min(top, max(0, len(rows) - visible))
         if index < top:
@@ -62,9 +64,10 @@ def run(screen, client):
                 except curses.error:
                     pass
 
-        current = f'현재 F{current_slot}/{current_slot % 10}' if current_slot else '현재 쌍 확인 중'
-        put(0, f'i3.ai-deck  {current}', curses.A_BOLD)
-        for line, row in enumerate(rows[top:top + visible], 1):
+        previous_pair, previous_number = None, None
+        highlight = curses.A_BOLD | (curses.color_pair(5) if curses.has_colors()
+                                     else curses.A_STANDOUT)
+        for line, row in enumerate(rows[top:top + visible]):
             empty = row['state'] in ('empty', 'exited')
             color = {'working': 1, 'waiting': 2, 'done': 3}.get(row['state'], 4)
             status_attr = curses.color_pair(color) if curses.has_colors() else 0
@@ -76,18 +79,23 @@ def run(screen, client):
             badge = '!' if row.get('unread') else ' '
             location = ' [위치 불명]' if row['kind'] == 'agent' and not row['located'] \
                 and row.get('alive') else ''
-            extra = f' (+{row["count"] - 1})' if row.get('count', 1) > 1 else ''
-            if row.get('attention_count'):
-                extra += f' [확인 {row["attention_count"]}]'
-            put(line, f'{row["pair"]:6} {badge}{LABELS[row["state"]]}  '
-                      f'{row["name"]}{extra}{location}', attr)
+            pair = row['pair'] if row['pair'] != previous_pair else ''
+            workspace = row['workspace_label'] if row.get('number') != previous_number or pair else ''
+            put(line, ' ' * (width - 1), attr)
+            put(line, f'{pair:3} {workspace:2}', attr)
+            put(line, f'{badge}{LABELS[row["state"]]}', attr, x=9)
+            put(line, row['name'] + location, attr, x=23)
             if not empty:
                 put(line, f'{badge}{LABELS[row["state"]]}',
-                    status_attr | (curses.A_REVERSE if row['id'] == selected else 0), x=7)
-            if row.get('slot') == current_slot and row['id'].startswith('pair:'):
-                highlight = curses.A_BOLD | (curses.color_pair(5) if curses.has_colors()
-                                             else curses.A_STANDOUT)
-                put(line, f'{row["pair"]:6}', highlight)
+                    status_attr | (curses.A_REVERSE if row['id'] == selected else 0), x=9)
+            in_workspace = row['kind'] == 'empty' or (row.get('alive') and row.get('located'))
+            if in_workspace and pair and row.get('slot') == current_slot:
+                put(line, pair, highlight)
+            if in_workspace and workspace and row.get('number') == current_number:
+                put(line, f'{workspace:2}', highlight, x=4)
+            if row.get('focused'):
+                put(line, '>', highlight, x=7)
+            previous_pair, previous_number = row['pair'], row.get('number')
         put(height - 2, message or error, curses.A_BOLD)
         put(height - 1, 'j/k 이동 · g/G 처음/끝 · Enter 열기 · n 다음 확인 · 클릭 열기 · q 닫기')
         screen.refresh()
@@ -116,11 +124,11 @@ def run(screen, client):
             snapshot = result['snapshot']
             rows = snapshot['rows']
             current_slot = snapshot.get('current_slot')
+            current_number = snapshot.get('current_number')
             last_poll = 0
             if target:
                 attention_cursor = target
-                selected = next((r['id'] for r in rows if target in r.get('member_ids', [])
-                                 or r['id'] == target), selected)
+                selected = target
                 message = ''
             else:
                 message = '다음 확인 대상이 없습니다.'
@@ -137,8 +145,8 @@ def run(screen, client):
                 attention_cursor = None
             elif buttons & (curses.BUTTON1_PRESSED | curses.BUTTON1_RELEASED |
                             curses.BUTTON1_CLICKED | curses.BUTTON1_DOUBLE_CLICKED):
-                target = top + y - 1
-                if 1 <= y <= visible and 0 <= target < len(rows):
+                target = top + y
+                if 0 <= y < visible and 0 <= target < len(rows):
                     selected = rows[target]['id']
                     attention_cursor = rows[target].get('target')
                     # VTE may consume the first press to focus an inactive terminal.
