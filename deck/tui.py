@@ -91,7 +91,7 @@ def run(screen, client):
                                              else curses.A_STANDOUT)
                 put(line, f'{row["pair"]:6}', highlight)
         put(height - 2, message or error, curses.A_BOLD)
-        put(height - 1, 'j/k 이동 · Enter 열기 · n 다음 확인 · 클릭 열기 · q 닫기')
+        put(height - 1, 'j/k 이동 · g/G 처음/끝 · Enter 열기 · n 다음 확인 · 클릭 열기 · q 닫기')
         screen.refresh()
         key = screen.getch()
         if key in (ord('q'), 27):
@@ -99,6 +99,9 @@ def run(screen, client):
         if key in (ord('j'), curses.KEY_DOWN, ord('k'), curses.KEY_UP) and rows:
             delta = 1 if key in (ord('j'), curses.KEY_DOWN) else -1
             selected = rows[min(max(0, index + delta), len(rows) - 1)]['id']
+            attention_cursor = None
+        elif key in (ord('g'), ord('G')) and rows:
+            selected = rows[0 if key == ord('g') else -1]['id']
             attention_cursor = None
         elif key in (10, 13, curses.KEY_ENTER) and selected:
             attention_cursor = next((r.get('target') for r in rows if r['id'] == selected), None)

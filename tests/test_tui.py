@@ -34,6 +34,20 @@ class Client:
 
 
 class MouseTests(unittest.TestCase):
+    def run_keys(self, keys, client=None):
+        client = client or Client()
+        with ExitStack() as stack:
+            for name in ('curs_set', 'set_escdelay', 'mouseinterval', 'mousemask'):
+                stack.enter_context(patch('deck.tui.curses.' + name))
+            stack.enter_context(patch('deck.tui.curses.has_colors', return_value=False))
+            run(Screen(keys), client)
+        return client.calls
+
+    def test_g_and_G_select_extremes_without_navigating(self):
+        self.assertEqual(self.run_keys([ord('G'), ord('g'), ord('q')]), [])
+        self.assertEqual(self.run_keys([ord('G'), 10, ord('g'), 10, ord('q')]),
+                         ['pair:3', 'pair:1'])
+
     def exercise(self, buttons):
         screen = Screen([curses.KEY_MOUSE] * len(buttons) + [ord('q')])
         client = Client()
