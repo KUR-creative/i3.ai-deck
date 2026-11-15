@@ -3,7 +3,7 @@
 i3 전체의 Codex 세션을 나열하고 해당 창으로 이동하는 작은 TUI.
 창 배치와 에이전트 실행은 기존 i3와 터미널이 담당한다.
 
-현재 단계: 중간 사용이 가능한 첫 버전. 설치 없이 소스에서 실행한다.
+현재 단계: 중간 사용이 가능한 첫 버전. 실행 명령은 `ais`, 프로젝트 이름은 i3.ai-deck이다.
 
 다중 에이전트 목록·`[0]` 표시와 알림 클릭 이동을 구현했으며, 후속 계획과
 재개 세션 누락 사례는 [다음 변경 계획](docs/PLAN.md)에 정리했다.
@@ -13,12 +13,27 @@ dunst의 왼쪽 클릭 액션 설정과 역할 분담은
 
 ## 실행
 
-일반 터미널에서 실행한다. 이 앱을 위한 sudo나 i3 설정 변경은 필요 없다.
+일반 터미널에서 `ais`로 실행한다. sudo나 i3 설정 변경은 필요 없다.
 
 ```bash
-cd ~/dev/i3.ai-deck
-python3 ai_deck.py
+ais
+ais -h  # 옵션·사용 예·키 조작·의존성·상태 경로 안내
 ```
+
+로컬 등록은 심볼릭 링크 하나다. 이미 등록돼 있으면 다시 만들 필요 없다.
+
+```bash
+chmod u+x ~/dev/i3.ai-deck/ai_deck.py
+mkdir -p ~/.local/bin
+ln -s ~/dev/i3.ai-deck/ai_deck.py ~/.local/bin/ais
+```
+
+`~/.local/bin`이 PATH에 있어야 한다. 현재 환경에는 포함돼 있다.
+`ln -s`는 기존 파일을 덮어쓰지 않는다. 저장소를 옮기면 링크도 새 위치로 바꿔야 한다.
+로컬 링크는 Git에 포함하지 않으며, 원본 파일·실행 권한·이 안내를 기록한다.
+이 명령 등록은 로그인 자동 시작을 설정하지 않는다.
+
+등록 없이 `python3 ~/dev/i3.ai-deck/ai_deck.py`로 실행하는 방법도 유지한다.
 
 다른 터미널에서도 같은 명령으로 열 수 있다. 첫 실행 시 서버를 자동 시작하며
 TUI에서 `q`를 눌러도 서버와 Codex는 유지된다.
@@ -34,9 +49,9 @@ TUI에서 `q`를 눌러도 서버와 Codex는 유지된다.
 | q, Esc | 현재 TUI만 닫기 |
 
 ```bash
-python3 ai_deck.py --start-server # TUI 없이 백그라운드 서버만 시작 (이미 있으면 재사용)
-python3 ai_deck.py --list         # 같은 서버의 현재 상태를 JSON으로 확인
-python3 ai_deck.py --stop-server  # 서버 종료; 다음 실행 시 세션 재발견
+ais --start-server # TUI 없이 백그라운드 서버만 시작 (이미 있으면 재사용)
+ais --list         # 같은 서버의 현재 상태를 JSON으로 확인
+ais --stop-server  # 서버 종료; 다음 실행 시 세션 재발견
 ```
 
 코드를 업데이트한 뒤에는 서버도 위 명령으로 종료하고 TUI를 다시 연다.
@@ -44,7 +59,7 @@ python3 ai_deck.py --stop-server  # 서버 종료; 다음 실행 시 세션 재�
 다른 터미널에서 아래 명령으로 서버를 다시 시작하면 자동으로 연결된다.
 
 ```bash
-python3 ai_deck.py --start-server
+ais --start-server
 ```
 
 대기 중에도 j/k·g/G·q를 사용할 수 있다. Enter·클릭·n/N 요청은 서버가 연결될 때까지
@@ -61,9 +76,9 @@ python3 ai_deck.py --start-server
 중복 시작 확인:
 
 ```bash
-python3 ai_deck.py --start-server
+ais --start-server
 pgrep -af '[a]i_deck.py --server'
-python3 ai_deck.py --start-server
+ais --start-server
 pgrep -af '[a]i_deck.py --server'
 ```
 
