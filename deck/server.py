@@ -23,10 +23,14 @@ def default_socket():
 
 
 class Client:
-    def __init__(self, path):
+    def __init__(self, path, timeout=8):
         self.socket = socket.socket(socket.AF_UNIX)
-        self.socket.settimeout(8)
-        self.socket.connect(str(path))
+        self.socket.settimeout(timeout)
+        try:
+            self.socket.connect(str(path))
+        except OSError:
+            self.socket.close()
+            raise
         self.stream = self.socket.makefile('rwb')
 
     def request(self, action='snapshot', **params):
@@ -41,8 +45,10 @@ class Client:
         return reply.get('data')
 
     def close(self):
-        self.stream.close()
-        self.socket.close()
+        try:
+            self.stream.close()
+        finally:
+            self.socket.close()
 
 
 def connect(path, start=True):
