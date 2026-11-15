@@ -119,7 +119,7 @@ class Model:
                                    for s in active)
                     rows.append(dict(id=f'workspace:{number}', kind='empty', number=number,
                                      slot=pair['slot'], pair=label, workspace_label=workspace_label,
-                                     name='연결 확인 필요' if possible else '비어 있음',
+                                     name='연결 확인 필요' if possible else '에이전트 없음',
                                      state='unmapped' if possible else 'empty',
                                      unread=False, focused=False, located=True, target=None))
         unplaced = [dict(s, pair='[?]', workspace_label='?', kind='agent', target=s['id'])

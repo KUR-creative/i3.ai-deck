@@ -6,7 +6,7 @@ from .text import fit
 
 
 LABELS = dict(working='● 작업 중', waiting='? 질문', done='✓ 완료', idle='· 유휴',
-              exited='× 종료', unknown='? 확인 불가', empty='· 빈 쌍', unmapped='? 연결 불명')
+              exited='× 종료', unknown='? 확인 불가', empty='etc', unmapped='? 연결 불명')
 
 
 def run(screen, client):
@@ -82,7 +82,7 @@ def run(screen, client):
             pair = row['pair'] if row['pair'] != previous_pair else ''
             workspace = row['workspace_label'] if row.get('number') != previous_number or pair else ''
             put(line, ' ' * (width - 1), attr)
-            put(line, f'{pair:3} {workspace:2}', attr)
+            put(line, f'{pair:3} {workspace:>2}', attr)
             put(line, f'{badge}{LABELS[row["state"]]}', attr, x=9)
             put(line, row['name'] + location, attr, x=23)
             if not empty:
@@ -92,7 +92,7 @@ def run(screen, client):
             if in_workspace and pair and row.get('slot') == current_slot:
                 put(line, pair, highlight)
             if in_workspace and workspace and row.get('number') == current_number:
-                put(line, f'{workspace:2}', highlight, x=4)
+                put(line, f'{workspace:>2}', highlight, x=4)
             if row.get('focused'):
                 put(line, '>', highlight, x=7)
             previous_pair, previous_number = row['pair'], row.get('number')

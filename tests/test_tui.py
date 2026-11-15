@@ -32,7 +32,7 @@ class Client:
                      alive=True, focused=sid == 'a', target=sid)
                 for sid, state, name in [('a', 'working', 'agent A'), ('b', 'done', 'agent B')]]
         rows.append(dict(id='workspace:10', kind='empty', slot=10, pair='[0]', number=10,
-                         workspace_label='0', state='empty', name='비어 있음', located=True,
+                         workspace_label='0', state='empty', name='에이전트 없음', located=True,
                          focused=False, target=None))
         return dict(error='', agents=rows[:2], current_slot=10, current_number=20, rows=rows)
 
@@ -109,6 +109,10 @@ class MouseTests(unittest.TestCase):
         self.assertIn((0, 23, 'agent A', curses.A_REVERSE), screen.drawn)
         self.assertIn((1, 23, 'agent B', 0), screen.drawn)
         self.assertFalse(any('현재' in text or '(+2)' in text for _, _, text, _ in screen.drawn))
+        self.assertIn((0, 0, '[0] F0', curses.A_REVERSE), screen.drawn)
+        self.assertIn((2, 0, '     0', curses.A_DIM), screen.drawn)
+        self.assertIn((2, 9, ' etc', curses.A_DIM), screen.drawn)
+        self.assertIn((2, 23, '에이전트 없음', curses.A_DIM), screen.drawn)
 
 
 if __name__ == '__main__':
