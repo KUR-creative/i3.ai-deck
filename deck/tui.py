@@ -2,7 +2,6 @@
 import curses
 import time
 
-from .model import next_attention
 from .text import fit
 
 
@@ -25,7 +24,7 @@ def run(screen, client):
             curses.init_pair(number, color, -1)
         curses.init_pair(5, curses.COLOR_BLACK, curses.COLOR_CYAN)
     selected, top, message = None, 0, ''
-    rows, agents, error, last_poll = [], [], '', 0
+    rows, error, last_poll = [], '', 0
     current_slot = None
     attention_cursor = None
 
@@ -42,7 +41,6 @@ def run(screen, client):
         if time.monotonic() - last_poll >= 0.3:
             snapshot = client.request()
             rows, error = snapshot['rows'], snapshot['error']
-            agents = snapshot['agents']
             current_slot = snapshot.get('current_slot')
             if selected not in {row['id'] for row in rows}:
                 selected = rows[0]['id'] if rows else None
@@ -109,12 +107,21 @@ def run(screen, client):
         elif key == ord('n'):
             current = attention_cursor or next(
                 (r.get('target') for r in rows if r['id'] == selected), None)
-            target = next_attention(agents, current)
+            try:
+                result = client.request('next', after=current)
+            except ValueError as problem:
+                message = str(problem)
+                continue
+            target = result['target']
+            snapshot = result['snapshot']
+            rows = snapshot['rows']
+            current_slot = snapshot.get('current_slot')
+            last_poll = 0
             if target:
                 attention_cursor = target
                 selected = next((r['id'] for r in rows if target in r.get('member_ids', [])
                                  or r['id'] == target), selected)
-                navigate(target)
+                message = ''
             else:
                 message = '다음 확인 대상이 없습니다.'
         elif key == curses.KEY_MOUSE:

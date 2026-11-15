@@ -90,10 +90,27 @@ class ModelTests(unittest.TestCase):
         model.reconcile(live, [self.window(), other])
         row = next(r for r in model.snapshot()['rows'] if r['id'] == 'pair:3')
         self.assertEqual(row['name'], 'second')
+        self.assertFalse(model.sessions['other']['unread'])
         # Moving that window preserves its focus history in the destination pair.
         model.reconcile(live, [self.window(4), dict(other, number=4)])
         row = next(r for r in model.snapshot()['rows'] if r['id'] == 'pair:4')
         self.assertEqual(row['name'], 'second')
+
+    def test_next_visits_hidden_agent_then_stops_after_acknowledgement(self):
+        model = self.model
+        model.titles.names.update(s='agent', other='second')
+        live = self.process()
+        live['other'] = dict(live['s'], pid=200)
+        other = dict(self.window(focused=True), con_id=456, title='second | project')
+        model.reconcile(live, [self.window(), other])
+        model.remember_focus(456)
+        with patch.object(model, 'refresh') as refresh, patch('deck.i3.focus') as focus:
+            focus.side_effect = lambda pair, con_id: model.remember_focus(con_id)
+            result = model.navigate_next('other')
+            self.assertEqual(result['target'], 's')
+            self.assertTrue(refresh.called)
+            self.assertFalse(model.sessions['s']['unread'])
+            self.assertIsNone(model.navigate_next('s')['target'])
 
     def test_duplicate_title_does_not_guess(self):
         model = self.model

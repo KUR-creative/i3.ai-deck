@@ -93,6 +93,10 @@ class Model:
         self.focus_sequence += 1
         self.focused[con_id] = self.focus_sequence
         self.last_focus = con_id
+        for session in self.sessions.values():
+            if session.get('alive') and session['con_id'] == con_id and session['state'] == 'done':
+                session['seen'] = session['completion']
+                session['unread'] = False
 
     def snapshot(self):
         rows = []
@@ -129,6 +133,7 @@ class Model:
     def navigate(self, sid):
         # Read the latest location before constructing a command, even if re-sorted.
         self.refresh()
+
         if sid.startswith('pair:'):
             slot = int(sid.split(':')[1])
             pair = next(pair for pair in self.pairs if pair['slot'] == slot)
@@ -142,6 +147,13 @@ class Model:
                 raise ValueError('이 세션의 i3 창을 확인할 수 없습니다.')
             i3.focus(i3.pair_for(session['number'], self.pairs), session['con_id'])
         self.refresh()
+
+    def navigate_next(self, after=None):
+        self.refresh()
+        target = next_attention(self.snapshot()['agents'], after)
+        if target:
+            self.navigate(target)
+        return dict(target=target, snapshot=self.snapshot())
 
 
 def needs_attention(session):

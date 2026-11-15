@@ -18,6 +18,12 @@ class FakeModel:
             raise ValueError('missing agent')
         self.selected = sid
 
+    def navigate_next(self, after=None):
+        target = 'agent' if self.selected is None else None
+        if target:
+            self.navigate(target)
+        return dict(target=target, snapshot=self.snapshot())
+
 
 class ServerTests(unittest.TestCase):
     def test_clients_share_state_and_error_does_not_disconnect(self):
@@ -33,8 +39,10 @@ class ServerTests(unittest.TestCase):
                     self.assertEqual(a.request(), b.request())
                     with self.assertRaisesRegex(ValueError, 'missing agent'):
                         a.request('focus', id='missing')
+                    self.assertEqual(a.request('next')['target'], 'agent')
                     a.request('focus', id='agent')
                     self.assertTrue(b.request()['rows'][0]['seen'])
+                    self.assertIsNone(b.request('next', after='agent')['target'])
                     a.close()
                     self.assertTrue(b.request()['rows'][0]['seen'])
                     b.request('stop')

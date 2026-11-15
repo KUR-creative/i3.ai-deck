@@ -48,6 +48,23 @@ class MouseTests(unittest.TestCase):
         self.assertEqual(self.run_keys([ord('G'), 10, ord('g'), 10, ord('q')]),
                          ['pair:3', 'pair:1'])
 
+    def test_n_requests_fresh_server_target_including_hidden_agent(self):
+        class NextClient(Client):
+            def request(self, action='snapshot', **params):
+                snapshot = super().request('snapshot')
+                snapshot['rows'][1].update(kind='pair', target='representative',
+                                            member_ids=['representative', 'hidden'])
+                if action == 'next':
+                    self.calls.append(('next', params['after']))
+                    return dict(target='hidden', snapshot=snapshot)
+                if action == 'focus':
+                    self.calls.append(params['id'])
+                return snapshot
+
+        client = NextClient()
+        self.assertEqual(self.run_keys([ord('j'), ord('n'), ord('n'), ord('q')], client),
+                         [('next', 'representative'), ('next', 'hidden')])
+
     def exercise(self, buttons):
         screen = Screen([curses.KEY_MOUSE] * len(buttons) + [ord('q')])
         client = Client()
