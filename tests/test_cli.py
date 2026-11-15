@@ -1,4 +1,8 @@
+import os
+from pathlib import Path
+import subprocess
 import sys
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -6,6 +10,21 @@ import ai_deck
 
 
 class StartServerTests(unittest.TestCase):
+    def test_symlink_help_from_another_directory_without_starting_server(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            link = root / 'ais'
+            link.symlink_to(Path(ai_deck.__file__).resolve())
+            env = dict(os.environ, XDG_RUNTIME_DIR=str(root / 'runtime'))
+            env.pop('PYTHONPATH', None)
+            result = subprocess.run([str(link), '-h'], cwd=root, env=env,
+                                    capture_output=True, text=True, timeout=3)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('usage: ais', result.stdout)
+            self.assertIn('ais --start-server', result.stdout)
+            self.assertIn('q는 TUI만 닫습니다.', result.stdout)
+            self.assertFalse((root / 'runtime').exists())
+
     def test_start_server_connects_or_starts_without_entering_tui(self):
         client = Mock()
         with patch.object(sys, 'argv', ['ai_deck.py', '--start-server', '--socket', '/tmp/example']), \
