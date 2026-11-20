@@ -88,7 +88,12 @@ def serve(path):
                         model.refresh()
                         commands = completions.collect(model.sessions.values())
                         alive = {sid for sid, s in model.sessions.items() if s.get('alive')}
+                        viewed = {sid for sid, s in model.sessions.items()
+                                  if s.get('focused') or (s.get('completion') is not None
+                                      and s.get('seen') == s['completion'])}
                     # Desktop I/O must not block clients holding the model lock.
+                    for sid in viewed:
+                        alerts.dismiss(sid)
                     alerts.prune(alive)
                     for sid, command in commands:
                         try:

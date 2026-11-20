@@ -54,13 +54,15 @@ class NotificationTests(unittest.TestCase):
     def test_notification_uses_arguments_without_shell(self):
         args = command(self.session(name='$(touch unwanted)'))
         process = Mock(returncode=0)
-        process.communicate.return_value = ('default\n', '')
+        process.stdout.readline.return_value = '101\n'
+        process.stdout.read.return_value = 'default\n'
+        process.stderr.read.return_value = ''
         process.poll.return_value = 0
         actions = Actions(Mock())
         with patch('deck.notify.subprocess.Popen', return_value=process) as run:
             actions.send('s', args).join(1)
         self.assertIn('--action=default,이동', run.call_args.args[0])
-        self.assertIn('string:x-dunst-stack-tag:i3-ai-deck:s', run.call_args.args[0])
+        self.assertIn('--printid', run.call_args.args[0])
         self.assertNotIn('shell', run.call_args.kwargs)
         self.assertEqual(list(actions.clicked()), ['s'])
         self.assertEqual(list(actions.clicked()), [])
@@ -68,15 +70,19 @@ class NotificationTests(unittest.TestCase):
 
     def test_dismissal_replaced_clicks_and_exited_sessions_do_not_navigate(self):
         first, second = Mock(returncode=0), Mock(returncode=0)
-        first.communicate.return_value = ('default\n', '')
-        second.communicate.return_value = ('', '')
+        first.stdout.readline.return_value = '101\n'
+        second.stdout.readline.return_value = '102\n'
+        first.stdout.read.return_value = 'default\n'
+        first.stderr.read.return_value = ''
+        second.stdout.read.return_value = ''
+        second.stderr.read.return_value = ''
         first.poll.return_value = second.poll.return_value = 0
         actions = Actions(Mock())
         with patch('deck.notify.subprocess.Popen', side_effect=[first, second]):
             actions.send('s', command(self.session())).join(1)
             actions.send('s', command(self.session())).join(1)
         self.assertEqual(list(actions.clicked()), [])
-        actions.events.put(('s', second))
+        actions.events.put(('s', actions.pending['s']))
         actions.prune(set())
         self.assertEqual(list(actions.clicked()), [])
         actions.close()
@@ -85,7 +91,7 @@ class NotificationTests(unittest.TestCase):
         process = Mock()
         process.poll.return_value = None
         actions = Actions(Mock())
-        actions.pending['s'] = process
+        actions.pending['s'] = dict(process=process, id=None, dismissed=False)
         actions.close()
         process.terminate.assert_called_once_with()
         process.wait.assert_called_once_with(timeout=.5)
@@ -93,7 +99,9 @@ class NotificationTests(unittest.TestCase):
 
     def test_failed_sender_is_logged_without_navigation(self):
         process = Mock(returncode=1)
-        process.communicate.return_value = ('', '액션 수신 실패\n')
+        process.stdout.readline.return_value = ''
+        process.stdout.read.return_value = ''
+        process.stderr.read.return_value = '액션 수신 실패\n'
         process.poll.return_value = 1
         actions = Actions(Mock())
         with patch('deck.notify.subprocess.Popen', return_value=process), \
@@ -106,10 +114,10 @@ class NotificationTests(unittest.TestCase):
     def test_real_child_action_and_shutdown(self):
         wake = threading.Event()
         actions = Actions(wake.set)
-        # Strip dunstify flags to exercise real pipes/processes using Python.
-        args = [sys.executable, '-c', "print('default', flush=True)"]
+        # Python 자식 프로세스로 알림 ID와 액션의 파이프 수신만 검증한다.
+        args = [sys.executable, '-c', "print('101', flush=True); print('default', flush=True)"]
         def launch(argv, **kwargs):
-            return original([argv[0], *argv[4:]], **kwargs)
+            return original([argv[0], *argv[3:]], **kwargs)
         import subprocess
         original = subprocess.Popen
         try:
@@ -120,13 +128,77 @@ class NotificationTests(unittest.TestCase):
                 self.assertEqual(list(actions.clicked()), ['original-session'])
                 worker = actions.send('pending', [sys.executable, '-c',
                                                    'import time; time.sleep(60)'])
-                process = actions.pending['pending']
+                process = actions.pending['pending']['process']
                 actions.close()
                 worker.join(1)
                 self.assertIsNotNone(process.poll())
                 self.assertFalse(worker.is_alive())
                 self.assertEqual(list(actions.clicked()), [])
         finally:
+            actions.close()
+
+    def test_focus_closes_only_that_sessions_notification(self):
+        actions = Actions(Mock())
+        ready, closed = {}, {}
+        def sender(notification_id):
+            process = Mock(returncode=0)
+            process.stdout.readline.return_value = notification_id + '\n'
+            process.poll.return_value = 0
+            ready[notification_id], closed[notification_id] = threading.Event(), threading.Event()
+            def finish():
+                ready[notification_id].set()
+                self.assertTrue(closed[notification_id].wait(3))
+                return ''
+            process.stdout.read.side_effect = finish
+            process.stderr.read.return_value = ''
+            return process
+        first, other = sender('101'), sender('102')
+        with patch('deck.notify.subprocess.Popen', side_effect=[first, other]), \
+                patch.object(actions, 'close_notification', side_effect=lambda n: closed[n].set()) as close:
+            a = actions.send('s', command(self.session()))
+            b = actions.send('other', command(self.session(id='other')))
+            try:
+                self.assertTrue(ready['101'].wait(1) and ready['102'].wait(1))
+                actions.dismiss('s')
+                a.join(1)
+                close.assert_called_once_with('101')
+                self.assertIn('other', actions.pending)
+                self.assertEqual(list(actions.clicked()), [])
+            finally:
+                actions.close()
+                a.join(1); b.join(1)
+
+    def test_close_uses_only_the_given_notification_id(self):
+        with patch('deck.notify.subprocess.run') as close:
+            Actions.close_notification('101')
+        self.assertEqual(close.call_args.args[0], ['dunstify', '--close', '101'])
+        self.assertTrue(close.call_args.kwargs['check'])
+        self.assertNotIn('shell', close.call_args.kwargs)
+
+    def test_focus_before_id_arrives_does_not_close_a_new_notification(self):
+        actions = Actions(Mock())
+        release = threading.Event()
+        first, second = Mock(returncode=0), Mock(returncode=0)
+        def delayed_id():
+            self.assertTrue(release.wait(3))
+            return '101\n'
+        first.stdout.readline.side_effect = delayed_id
+        second.stdout.readline.return_value = '102\n'
+        first.stdout.read.return_value = 'default\n'
+        first.stderr.read.return_value = ''
+        second.stdout.read.return_value = 'default\n'
+        second.stderr.read.return_value = ''
+        first.poll.return_value = second.poll.return_value = 0
+        with patch('deck.notify.subprocess.Popen', side_effect=[first, second]), \
+                patch.object(actions, 'close_notification') as close:
+            a = actions.send('s', command(self.session()))
+            actions.dismiss('s')
+            b = actions.send('s', command(self.session()))
+            b.join(1)
+            release.set()
+            a.join(1)
+            close.assert_called_once_with('101')
+            self.assertEqual(list(actions.clicked()), ['s'])
             actions.close()
 
 

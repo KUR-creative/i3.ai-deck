@@ -15,9 +15,14 @@ class CompletionServerTests(unittest.TestCase):
             def __init__(self):
                 self.sessions = {'s': dict(id='s', alive=True, slot=3,
                                           name='완료 알림 테스트', completion='old')}
+                self.sessions['other'] = dict(id='other', alive=True, slot=3,
+                                             name='같은 쌍 다른 세션', completion='old')
                 self.refreshed = threading.Event()
+                self.refresh_count = 0
 
             def refresh(self):
+                self.observed_completion = self.sessions['s']['completion']
+                self.refresh_count += 1
                 self.refreshed.set()
 
             def snapshot(self):
@@ -62,6 +67,33 @@ class CompletionServerTests(unittest.TestCase):
                 while not hasattr(model, 'moved') and time.monotonic() < deadline:
                     time.sleep(.02)
                 self.assertEqual(model.moved, 's')
+                model.sessions['s'].update(focused=True, seen='new', completion='focused-new')
+                deadline = time.monotonic() + 3
+                while model.observed_completion != 'focused-new' and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertEqual(model.observed_completion, 'focused-new')
+                a.request()  # The model lock confirms collection finished after refresh.
+                self.assertEqual(len(sent), 1)
+                model.sessions['s']['focused'] = False
+                previous_count = model.refresh_count
+                deadline = time.monotonic() + 3
+                while model.refresh_count == previous_count and time.monotonic() < deadline:
+                    time.sleep(.02)
+                a.request()
+                self.assertEqual(len(sent), 1)  # Leaving must not replay the suppressed alert.
+                model.sessions['s']['completion'] = 'after-focus'
+                deadline = time.monotonic() + 3
+                while len(sent) < 2 and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertEqual(len(sent), 2)
+                alerts.dismiss.reset_mock()
+                # A brief visit already ended before polling; remember_focus retained seen.
+                model.sessions['s']['seen'] = 'after-focus'
+                deadline = time.monotonic() + 3
+                while not alerts.dismiss.called and time.monotonic() < deadline:
+                    time.sleep(.02)
+                self.assertTrue(alerts.dismiss.called)
+                self.assertTrue(all(call.args == ('s',) for call in alerts.dismiss.call_args_list))
                 a.request('stop')
                 thread.join(3)
                 self.assertFalse(thread.is_alive())

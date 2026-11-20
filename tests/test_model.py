@@ -178,6 +178,22 @@ class ModelTests(unittest.TestCase):
             self.assertFalse(model.sessions['s']['unread'])
             self.assertIsNone(model.select_next('s')['target'])
 
+    def test_brief_visit_during_new_work_acknowledges_the_previous_completion(self):
+        model = self.model
+        model.titles.names['s'] = 'agent'
+        model.reconcile(self.process(), [self.window()])
+        self.complete()
+        model.reconcile(self.process(), [self.window()])
+        self.assertTrue(model.sessions['s']['unread'])
+        with self.log.open('a') as stream:
+            stream.write('{"type":"event_msg","payload":{"type":"task_started"}}\n')
+        model.reconcile(self.process(), [self.window()])
+        model.remember_focus(123)
+        model.remember_focus(999)
+        model.reconcile(self.process(), [self.window()])
+        self.assertEqual(model.sessions['s']['state'], 'working')
+        self.assertEqual(model.sessions['s']['seen'], model.sessions['s']['completion'])
+
     def test_next_from_empty_workspace_respects_current_list_position(self):
         model = self.model
         model.titles.names['s'] = 'agent'

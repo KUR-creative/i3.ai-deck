@@ -60,22 +60,35 @@ class Actions:
                 pass
 
     def send(self, sid, args):
-        action_args = [args[0], '--action=default,이동', '-h',
-                       f'string:x-dunst-stack-tag:i3-ai-deck:{sid}', *args[1:]]
+        self.dismiss(sid)
+        # 개별 ID를 써서 이전 알림의 늦은 닫기 요청이 새 알림을 닫지 않게 한다.
+        action_args = [args[0], '--printid', '--action=default,이동', *args[1:]]
         with self.lock:
             if self.closed:
                 return
-            previous = self.pending.get(sid)
             process = subprocess.Popen(action_args, stdin=subprocess.DEVNULL,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            self.pending[sid] = process
-        if previous:
-            self.stop(previous)
+            notice = dict(process=process, id=None, dismissed=False)
+            self.pending[sid] = notice
 
         def wait():
-            output, error = process.communicate()
+            first = process.stdout.readline().strip()
+            if first.isdecimal():
+                with self.lock:
+                    notice['id'] = first
+                    dismissed = notice['dismissed']
+                if dismissed:
+                    self.close_notification(first)
+            # ID를 읽은 같은 스트림에서 나머지 결과도 읽어 버퍼의 액션을 놓치지 않는다.
+            output = process.stdout.read()
+            error = process.stderr.read()
+            process.wait()
+            process.stdout.close()
+            process.stderr.close()
+            with self.lock:
+                notice['id'] = None
             if process.returncode == 0 and output.strip() == 'default':
-                self.events.put((sid, process))
+                self.events.put((sid, notice))
                 self.wake()
             elif process.returncode > 0:
                 print(f'완료 알림 실패: {error.strip() or process.returncode}',
@@ -88,24 +101,42 @@ class Actions:
     def clicked(self):
         while True:
             try:
-                sid, process = self.events.get_nowait()
+                sid, notice = self.events.get_nowait()
             except queue.Empty:
                 return
             with self.lock:
-                valid = self.pending.get(sid) is process
+                valid = self.pending.get(sid) is notice
             if valid:
                 yield sid
 
     def prune(self, alive):
         with self.lock:
-            removed = [self.pending.pop(sid) for sid in list(self.pending) if sid not in alive]
-        for process in removed:
-            self.stop(process)
+            removed = [sid for sid in self.pending if sid not in alive]
+        for sid in removed:
+            self.dismiss(sid)
+
+    @staticmethod
+    def close_notification(notification_id):
+        try:
+            subprocess.run(['dunstify', '--close', notification_id], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, timeout=3)
+        except (OSError, subprocess.SubprocessError) as error:
+            print(f'알림 닫기 실패: {error}', file=sys.stderr, flush=True)
+
+    def dismiss(self, sid):
+        with self.lock:
+            notice = self.pending.pop(sid, None)
+            if notice is None:
+                return
+            notice['dismissed'] = True
+            notification_id = notice['id']
+        if notification_id:
+            self.close_notification(notification_id)
 
     def close(self):
         with self.lock:
             self.closed = True
-            pending = list(self.pending.values())
-            self.pending.clear()
-        for process in pending:
-            self.stop(process)
+            pending = list(self.pending.items())
+        for sid, notice in pending:
+            self.dismiss(sid)
+            self.stop(notice['process'])

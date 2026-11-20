@@ -99,7 +99,7 @@ class Model:
         """Acknowledge brief visits even if the next snapshot is already on the TUI."""
         self.last_focus = con_id
         for session in self.sessions.values():
-            if session.get('alive') and session['con_id'] == con_id and session['state'] == 'done':
+            if session.get('alive') and session['con_id'] == con_id:
                 session['seen'] = session['completion']
                 session['unread'] = False
 
