@@ -20,6 +20,20 @@ class NotificationTests(unittest.TestCase):
         self.assertEqual(len(tracker.collect([self.session(completion='next')])), 1)
         self.assertEqual(tracker.collect([self.session(alive=False, completion='exit')]), [])
 
+    def test_focused_completion_is_suppressed_without_replaying_after_leaving(self):
+        tracker = Completions()
+        tracker.collect([self.session(completion='old')])
+        self.assertEqual(tracker.collect([self.session(completion='new', focused=True)]), [])
+        self.assertEqual(tracker.collect([self.session(completion='new', focused=False)]), [])
+        self.assertEqual(len(tracker.collect([self.session(completion='next', focused=False)])), 1)
+
+    def test_other_agent_in_same_pair_still_notifies(self):
+        tracker = Completions()
+        tracker.collect([self.session(completion='old'), self.session(id='other', completion='old')])
+        sent = tracker.collect([self.session(completion='new', focused=True),
+                                self.session(id='other', completion='new', focused=False)])
+        self.assertEqual([sid for sid, _ in sent], ['other'])
+
     def test_pair_and_title_use_requested_style(self):
         args = command(self.session())
         self.assertEqual(args[:7], ['dunstify', '-a', 'Codex', '-u', 'normal', '-t', '0'])

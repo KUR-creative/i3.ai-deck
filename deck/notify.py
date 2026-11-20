@@ -30,7 +30,8 @@ class Completions:
             if not session.get('alive') or not session.get('initialized', True):
                 continue
             sid, token = session['id'], session.get('completion')
-            if sid in self.observed and token and token != self.observed[sid]:
+            if (sid in self.observed and token and token != self.observed[sid]
+                    and not session.get('focused')):
                 commands.append((sid, command(session)))
             # Initial discovery establishes a baseline, without replaying old completions.
             self.observed[sid] = token
